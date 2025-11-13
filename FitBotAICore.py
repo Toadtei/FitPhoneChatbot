@@ -24,11 +24,11 @@ import sys, time, threading
 
 class Config:
     """Configuration settings"""
-    OLLAMA_MODEL = "mistral"
+    OLLAMA_MODEL = "phi3:mini"
     OLLAMA_ENDPOINT = "http://localhost:11434"
-    KB_PATH = "knowledge_base.json"
-    MAX_CONVERSATION_HISTORY = 10 # number of messages we are sending to the LLM to proccess and understand the context, 
-
+    KB_PATH = "knowledgebase.json"
+    CONTEXT_WINDOW_SIZE = 8 # number of messages we are sending to the LLM to proccess and understand the context, 
+    MAX_CONVERSATION_HISTORY = 10 #maybe for future, how many messages are we storing in genearl, can be later use for things like summarize the conversation
 
 class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, instead of documents and vecotr database, we have Q&A pairs in json. 
     # TODO: move from jaccard similarity matching to sentecne embedings and vectorizing to match better based on meaning of the input.
@@ -197,6 +197,10 @@ class ConversationManager:
 
         # Generate response (streaming)hh
         response = self.ollama.generate_stream(user_prompt, system_prompt)
+
+        # clenas up prefix FitBot: that smaller models Phi3:mini add
+        response = re.sub(r'^FitBot:\s*', '', response.strip(), flags=re.IGNORECASE)
+
         
         # Add source if available
         if kb_matches and kb_matches[0]['score'] > 0 and kb_matches[0].get('source'):
@@ -210,12 +214,12 @@ class ConversationManager:
     def _get_system_prompt(self) -> str:
         """System prompt defining bot personality""" # the base prompt, this prompt defines how our ai model should act, SYSTEM PROMPT, 
         #TODO: prompt engineering, experiments and research how to imporve and get better results
-        return """You are FitBot, a friendly AI assistant helping young adults (18-25) with healthy smartphone habits.
+        return """You are FitBot, a friendly AI assistant helping young adults with healthy smartphone habits.
 
-PERSONALITY:GG
+PERSONALITY:
 - Warm, conversational, supportive friend
 - Empathetic and non-judgmental
-- Casual language, not preachy
+- Casual natural language, not preachy
 - Personal and relatable
 
 KNOWLEDGE BASE USAGE:
@@ -223,12 +227,12 @@ KNOWLEDGE BASE USAGE:
 - Do not halucinate
 - For greetings/chitchat, respond naturally without forcing KB info
 - Combine KB entries naturally when relevant
-- If user asks something not in KB, acknowledge and offer related topics
+- If user asks something not in KB, acknowledge and inform about that but offer related topics
 
 RESPONSE STYLE:
 - Address their SPECIFIC situation
-- Build on conversation naturally respecting the previous messages
-- 2-4 sentences typically, max 6,
+- Keep responses SHORT and conversational, 1-3 sentences typically, max 6,
+- Build on conversation naturally respecting the previous messages, do NOT repeat greetings
 - Ask follow-up questions when appropriate
 - Be encouraging and realistic
 
@@ -236,8 +240,13 @@ BOUNDARIES:
 - Never diagnose health conditions
 - Provide info and support, not therapy
 - Suggest professional help when needed, especially for mentiones of self-harm, suicide, or medical emergency
-- If the conversation flows off-topic, redirect the user and inform him about your purpose"""
+- If the conversation flows off-topic, gently redirect
     
+IMPORTANT:
+- DO NOT start your response with "FitBot:" - just respond directly
+- DO NOT repeat greetings if you've already greeted them
+- Keep track of what's been discussed and build on it"""
+
     def _build_prompt(self, user_input: str, kb_matches: List[Dict]) -> str:
         """Build complete prompt with context and KB""" # builds the whole promtp that is being send to the ai model, indluces the previous system prompt, user message, contex(the message history up until now), relevant matched KB Q&A pairs and 
         # Format conversation history
@@ -256,19 +265,29 @@ BOUNDARIES:
         return f"""CONVERSATION HISTORY:
 {context}
 
-USER MESSAGE: "{user_input}"
+CURRENT USER MESSAGE: "{user_input}"
 {kb_info}
 
-Respond naturally and conversationally to the user's message. If it's a greeting or chitchat, respond warmly. If it's about knowledge, especially digital wellbeing, use the KB information as your foundation.
+Instructions: 
+- This is a CONTINUING conversation
+- Keep your response SHORT (1-3 sentences)
+- Build naturally on what was said before
+- DO NOT start with "FitBot:" - respond directly
+- Be conversational and natural
 
 Your response:"""
     
     def _format_context(self) -> str:
         """Format recent conversation for context"""
-        if len(self.messages) <= 1:
+        if len(self.messages) == 0:
             return "(Start of conversation)"
         
-        recent = self.messages[-7:-1]  # Last 3 exchanges
+        # Get last N messages based on config
+        recent = self.messages[-self.config.CONTEXT_WINDOW_SIZE:]
+        
+        if len(recent) == 0:
+            return "(Start of conversation)"
+        
         formatted = ""
         for msg in recent:
             role = "User" if msg["role"] == "user" else "FitBot"

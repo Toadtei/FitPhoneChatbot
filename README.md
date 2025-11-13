@@ -17,9 +17,9 @@ A conversational AI assistant helping young adults develop healthier smartphone 
    curl -fsSL https://ollama.com/install.sh | sh
 ```
 
-2. **Download Mistral Model**
+2. **Download Mistral Model or Phi for better local testing**
 ```bash
-   ollama pull mistral
+   ollama pull phi3:mini
 ```
 
 3. **Start Ollama Service**
