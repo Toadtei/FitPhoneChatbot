@@ -1,3 +1,10 @@
+BEFORE YOU START WORKING:
+- ALWAYS GIT PULL
+- AFTER YOU FINISH, COMMIT AND PUSH
+- COMMIT AND PUSH OFTEN
+- DO NOT PUSH ERRORS
+- WORK ONLY ON DEV BRANCH OR CREATE YOUR OWN FOR EXPERIMENTING, NEVER PUSH DIRECTLY TO MAIN
+
 # FitBot - AI Chatbot for Healthy Smartphone Habits
 
 A conversational AI assistant helping young adults develop healthier smartphone habits through friendly, empathetic conversations.
