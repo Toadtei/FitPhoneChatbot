@@ -18,7 +18,8 @@ import re
 import os
 from datetime import datetime
 from typing import List, Dict, Set
-import sys, time, threading
+import threading
+import queue
 
 import tkinter as tk
 from tkinter import scrolledtext, ttk
@@ -184,7 +185,6 @@ class ConversationManager:
         system_prompt = self._get_system_prompt()
         user_prompt = self._build_prompt(user_input, kb_matches)
         
-        
         response = self.ollama.generate_stream(user_prompt, system_prompt, stream_callback)
         
         response = re.sub(r'^FitBot:\s*', '', response.strip(), flags=re.IGNORECASE)
@@ -218,7 +218,7 @@ KNOWLEDGE BASE USAGE:
 
 RESPONSE STYLE:
 - Address their SPECIFIC situation
-- Keep responses SHORT and conversational, 1-3 sentences typically, max 6,
+- Keep responses SHORT and conversational, 1-3 sentences typically, max 6
 - Build on conversation naturally respecting the previous messages, do NOT repeat greetings
 - Ask follow-up questions when appropriate
 - Be encouraging and realistic
@@ -226,7 +226,7 @@ RESPONSE STYLE:
 BOUNDARIES:
 - Never diagnose health conditions
 - Provide info and support, not therapy
-- Suggest professional help when needed, especially for mentiones of self-harm, suicide, or medical emergency
+- Suggest professional help when needed, especially for mentions of self-harm, suicide, or medical emergency
 - If the conversation flows off-topic, gently redirect
     
 IMPORTANT:
@@ -302,14 +302,22 @@ class ChatInterface:
     def __init__(self, config: Config):
         self.config = config
         self.conversation = ConversationManager(config)
+        self.token_queue = queue.Queue()
+        self.is_processing = False
         
         # Create main window
         self.root = tk.Tk()
         self.root.title("FitBot - Healthy Smartphone Habits")
-        self.root.geometry("800x600")
+        
+        # Launch in fullscreen/maximized
+        self.root.state('zoomed')  # For Windows
+        # Alternative for other platforms:
+        # self.root.attributes('-zoomed', True)  # Linux
+        # self.root.attributes('-fullscreen', True)  # macOS
+        
         self.root.configure(bg="#1e1e1e")
         
-        # Colors (Claude-like theme)
+        # Colors
         self.bg_color = "#1e1e1e"
         self.chat_bg = "#2d2d2d"
         self.user_bubble = "#3d5a80"
@@ -319,6 +327,9 @@ class ChatInterface:
         
         self._create_widgets()
         self._show_welcome_message()
+        
+        # Start token processing loop
+        self._process_token_queue()
     
     def _create_widgets(self):
         """Create GUI elements"""
@@ -328,7 +339,8 @@ class ChatInterface:
         header.pack(fill=tk.X, side=tk.TOP)
         header.pack_propagate(False)
         
-        title = tk.Label(header, text="🤖 FitBot", font=("Arial", 20, "bold"),
+        title = tk.Label(header, text="🤖 FitBot - Healthy Smartphone Habits", 
+                        font=("Arial", 20, "bold"),
                         bg="#d17842", fg="white")
         title.pack(pady=15)
         
@@ -344,15 +356,15 @@ class ChatInterface:
             fg=self.text_color,
             relief=tk.FLAT,
             state=tk.DISABLED,
-            spacing1=5,
-            spacing3=5
+            spacing1=2,
+            spacing3=2
         )
         self.chat_display.pack(fill=tk.BOTH, expand=True)
         
-        # Configure text tags for styling
+        # Configure text tags
         self.chat_display.tag_config("user", foreground="#7dd3fc", font=("Arial", 11, "bold"))
         self.chat_display.tag_config("bot", foreground="#fb923c", font=("Arial", 11, "bold"))
-        self.chat_display.tag_config("thinking", foreground="#888888", font=("Arial", 10, "italic"))
+        self.chat_display.tag_config("thinking", foreground="#fb923c", font=("Arial", 11, "bold"))
         
         # Input area
         input_frame = tk.Frame(self.root, bg=self.bg_color)
@@ -396,8 +408,7 @@ Topics I can help with:
 📱 Screen time • 😰 FOMO • 🔕 Notifications • 😴 Sleep
 🧘 Digital detox • 🎯 Focus • 📊 Social media
 
-What would you like to talk about?
-"""
+What would you like to talk about?"""
         self._append_message("bot", welcome)
     
     def _append_message(self, role: str, message: str, tag=None):
@@ -408,6 +419,8 @@ What would you like to talk about?
             self.chat_display.insert(tk.END, "You: ", "user")
         elif role == "bot":
             self.chat_display.insert(tk.END, "FitBot: ", "bot")
+        elif role == "thinking":
+            self.chat_display.insert(tk.END, "FitBot: ", "thinking")
         
         if tag:
             self.chat_display.insert(tk.END, message + "\n\n", tag)
@@ -432,6 +445,9 @@ What would you like to talk about?
     
     def _send_message(self):
         """Send user message"""
+        if self.is_processing:
+            return
+            
         user_input = self.input_field.get("1.0", tk.END).strip()
         
         if not user_input:
@@ -444,11 +460,12 @@ What would you like to talk about?
         self._append_message("user", user_input)
         
         # Disable input while processing
+        self.is_processing = True
         self.send_button.config(state=tk.DISABLED)
         self.input_field.config(state=tk.DISABLED)
         
         # Show thinking indicator
-        self._append_message("bot", "🤔 Thinking...", "thinking")
+        self._append_message("thinking", "🤔 Thinking...")
         
         # Process in background thread
         threading.Thread(target=self._process_response, args=(user_input,), daemon=True).start()
@@ -456,43 +473,47 @@ What would you like to talk about?
     def _process_response(self, user_input: str):
         """Process message in background thread"""
         
-        # Callback for streaming tokens to GUI
+        # Callback to queue tokens
         def stream_callback(token):
-            self.root.after(0, lambda: self._append_text(token))
+            self.token_queue.put(('token', token))
         
-        # Remove thinking indicator
-        self.root.after(0, self._remove_thinking)
+        # Signal to remove thinking and start response
+        self.token_queue.put(('start', None))
         
-        # Start bot response label
-        self.root.after(0, lambda: self._start_bot_response())
-        
-        # Generate response with streaming
+        # Generate response
         self.conversation.process_message(user_input, stream_callback)
         
-        # Add spacing after response
-        self.root.after(0, lambda: self._append_text("\n\n"))
+        # Signal completion
+        self.token_queue.put(('done', None))
+    
+    def _process_token_queue(self):
+        """Process tokens from queue in main thread"""
+        try:
+            while True:
+                msg_type, data = self.token_queue.get_nowait()
+                
+                if msg_type == 'start':
+                    # Remove thinking indicator
+                    self.chat_display.config(state=tk.NORMAL)
+                    self.chat_display.delete("end-3l", "end-1l")
+                    self.chat_display.insert(tk.END, "FitBot: ", "bot")
+                    self.chat_display.config(state=tk.DISABLED)
+                    
+                elif msg_type == 'token':
+                    self._append_text(data)
+                    
+                elif msg_type == 'done':
+                    self._append_text("\n\n")
+                    self.is_processing = False
+                    self.send_button.config(state=tk.NORMAL)
+                    self.input_field.config(state=tk.NORMAL)
+                    self.input_field.focus()
+                    
+        except queue.Empty:
+            pass
         
-        # Re-enable input
-        self.root.after(0, self._enable_input)
-    
-    def _remove_thinking(self):
-        """Remove thinking indicator"""
-        self.chat_display.config(state=tk.NORMAL)
-        # Delete last line (thinking indicator)
-        self.chat_display.delete("end-3l", "end-2l")
-        self.chat_display.config(state=tk.DISABLED)
-    
-    def _start_bot_response(self):
-        """Add bot label before streaming response"""
-        self.chat_display.config(state=tk.NORMAL)
-        self.chat_display.insert(tk.END, "FitBot: ", "bot")
-        self.chat_display.config(state=tk.DISABLED)
-    
-    def _enable_input(self):
-        """Re-enable input controls"""
-        self.send_button.config(state=tk.NORMAL)
-        self.input_field.config(state=tk.NORMAL)
-        self.input_field.focus()
+        # Schedule next check
+        self.root.after(10, self._process_token_queue)
     
     def start(self):
         """Start the GUI"""
@@ -582,7 +603,5 @@ def main():
     chat.start()
 
 
-
 if __name__ == "__main__":
     main()
-    
