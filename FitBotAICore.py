@@ -81,7 +81,7 @@ class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, in
         
         # checks if the jsnon file exists with specifide path from class Config
         if not os.path.exists(path):
-            self.logger.error('Knowledge base not found: ', path)
+            self.logger.error(f'Knowledge base not found: {path}')
             exit(1)
 
         # reads the json KB
@@ -117,13 +117,13 @@ class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, in
             question_tokens = self._tokenized_cache[i]
             score = self._jaccard_similarity(user_tokens, question_tokens)
         
-        scores.append({
-            "question": entry['q'],
-            "answer": entry['a'],
-            "source": entry.get('source', ''),
-            "category": entry.get('category', 'general'),
-            "score": score
-        })
+            scores.append({
+                "question": entry['q'],
+                "answer": entry['a'],
+                "source": entry.get('source', ''),
+                "category": entry.get('category', 'general'),
+                "score": score
+            })
     
         scores.sort(key=lambda x: x['score'], reverse=True)
         return scores[:top_k]
@@ -160,39 +160,39 @@ class OllamaClient:
                 self.logger.success(f"Connected to Ollama: {self.model}")
             else:
                 self.logger.error(f"Ollama returned status {response.status_code}")
-                exit(1)
+
         except Exception as e:
             self.logger.error(f"Cannot connect to Ollama: {e}")
-            exit(1)
     
-    def generate_stream(self, prompt: str, system_prompt: str = "", stream_callback=None):
+    def generate_stream(self, messages: List[Dict], stream_callback=None):
         """Generate response with streaming output"""
+        #UPDATED to send strucutred messages isnted of raw text
         import requests
         
         payload = {
             "model": self.model,
-            "prompt": prompt,
-            "system": system_prompt,
+            "messages": messages,
             "stream": True
         }
+        full_response = ""
         
         try:
             response = requests.post(
-                f"{self.endpoint}/api/generate",
+                f"{self.endpoint}/api/chat", # prevously was geenrate by mistake
                 json=payload,
                 stream=True,
                 timeout=60
             )
             
-            full_response = ""
+            response.raise_for_status()
             for line in response.iter_lines():
                 if line:
                     try:
                         chunk = json.loads(line)
-                        token = chunk.get("response", "")
-                        if token:
+                        # The chat API returns content in 'message' -  'content'
+                        if 'message' in chunk and 'content' in chunk['message']:
+                            token = chunk['message']['content']
                             full_response += token
-                            # Nwe call callback for GUI update if provided
                             if stream_callback:
                                 stream_callback(token)
                         
@@ -204,128 +204,110 @@ class OllamaClient:
             return full_response
             
         except Exception as e:
-            self.logger.error(f"Generation error: {e}")
-            return "I'm having trouble generating a response. Please try again."
+            error_msg = f"Error connecting to AI: {str(e)}"
+            self.logger.error(error_msg)
+            if stream_callback:
+                stream_callback(error_msg)
+            return error_msg
 
 
 class ConversationManager:
-    """Manages conversation flow and context""" # This class handles the context of the conversation, keeping track of past messages, the overall mamangerm and uses KowledgeBaseMatcher to find best knowledge and then OllamaClient class to connect to the model.
+    """Manages conversation flow and context""" 
+    # This class handles the context, KB retrieval, and constructing the message list for the Chat API
     
     def __init__(self, config: Config, logger: Logger):
         self.config = config
         self.logger = logger
         self.kb_matcher = KnowledgeBaseMatcher(config.KB_PATH, logger)
         self.ollama = OllamaClient(config.OLLAMA_MODEL, config.OLLAMA_ENDPOINT, logger)
-        self.messages = []
+        self.messages = [] 
+        # Stores messages as list of simple dicts: {"role": "user", "content": "..."}
     
     def process_message(self, user_input: str, stream_callback=None) -> str:
         """Process user message and generate response"""
-        self._add_message("user", user_input)
         
         # Get KB matches
-        kb_matches = self.kb_matcher.get_best_matches(user_input, top_k=3)
+        kb_matches = self.kb_matcher.get_best_matches(user_input, top_k=2)
         
-        # Build prompt
-        system_prompt = self._get_system_prompt()
-        user_prompt = self._build_prompt(user_input, kb_matches)
+        # Check matches and extract source
+        match_source = None
+        kb_context_str = ""
         
-        response = self.ollama.generate_stream(user_prompt, system_prompt, stream_callback)
+        # relevancy treshhold check
+        if kb_matches and kb_matches[0]['score'] > 0.15:
+            best_match = kb_matches[0]
+            #  string to inject into the System Prompt
+            kb_context_str = f"""
+RELEVANT KNOWLEDGE BASE INFO:
+Question: {best_match['question']}
+Answer: {best_match['answer']}
+"""
+            if best_match.get('source'):
+                match_source = best_match['source']
+
+        api_messages = []
         
-        response = re.sub(r'^FitBot:\s*', '', response.strip(), flags=re.IGNORECASE)
+        # A: System Prompt With KB info injected
+        base_system_prompt = self._get_system_prompt()
+        if kb_context_str:
+            full_system_content = base_system_prompt + kb_context_str
+        else:
+            full_system_content = base_system_prompt + "\nNo specific Knowledge Base info found for this query. Answer generally based on healthy digital habits."
+            
+        api_messages.append({"role": "system", "content": full_system_content})
         
-        if kb_matches and kb_matches[0]['score'] > 0 and kb_matches[0].get('source'):
-            source_text = f"\n\nSource: {kb_matches[0]['source']}"
-            response += source_text
+        # Chat History (Last N messages)
+        # We iterate through self.messages which are already in format {"role": "...", "content": "..."}
+        recent_history = self.messages[-self.config.CONTEXT_WINDOW_SIZE:]
+    
+        # This leaves the 'datetime' object behind so it is not send to the ai model
+        for msg in recent_history:
+            api_messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+            
+        #Current User Input
+        api_messages.append({"role": "user", "content": user_input})
+
+        # Send to Ollama (Chat Mode)
+        response_text = self.ollama.generate_stream(api_messages, stream_callback)
+        
+        # Post-processing-Removes "FitBot:" if the model accidentally outputted it
+        response_text = re.sub(r'^FitBot:\s*', '', response_text.strip(), flags=re.IGNORECASE)
+        
+        # 6. Adds Source
+        if match_source and len(response_text) > 5:
+            source_text = f"\n\nSource: {match_source}"
+            response_text += source_text
             if stream_callback:
                 stream_callback(source_text)
         
-        self._add_message("assistant", response)
-        return response
+        # Save to history
+        self._add_message("user", user_input)
+        self._add_message("assistant", response_text)
+        
+        return response_text
     
     def _get_system_prompt(self) -> str:
-        """System prompt defining bot personality""" # the base prompt, this prompt defines how our ai model should act, SYSTEM PROMPT, 
-        #TODO: prompt engineering, experiments and research how to imporve and get better results
-        return """You are FitBot, a friendly AI assistant helping young adults with healthy smartphone habits.
+        """System prompt defining bot personality""" 
+        # UPDATED: for better Chat API performance
+        return """You are FitBot, a down-to-earth but supportive AI assistant helping young adults with healthy smartphone habits.
 
-PERSONALITY:
-- Warm, conversational, supportive friend
-- Empathetic and non-judgmental
-- Casual natural language, not preachy
-- Personal and relatable
+CORE INSTRUCTIONS:
+1. You are a supportive friend, not a robot.
+3. Tone: Causal, direct, calm, and empathetic when required. 
+2. Keep responses SHORT (2-4 sentences max). Do not lecture.
+3. If RELEVANT KNOWLEDGE BASE INFO is provided below, use it as the primary source of truth.
+4. If the user is just saying "hi", greeting you, or engages in normal conversation reply naturally without pushing advice, be a supportive and listeing friend.
+5. If the user asks a question and NO KB INFO is provided, give general, safe advice about digital well-being, but disclose that this information is not in your knowledgebase yet.
+5. SAFETY: Never diagnose medical conditions. If a user mentions self-harm or severe distress, suggest professional help immediately.
 
-KNOWLEDGE BASE USAGE:
-- Use KB information as foundation for factual claims
-- Do not halucinate
-- For greetings/chitchat, respond naturally without forcing KB info
-- Combine KB entries naturally when relevant
-- If user asks something not in KB, acknowledge and inform about that but offer related topics
-
-RESPONSE STYLE:
-- Address their SPECIFIC situation
-- Keep responses SHORT and conversational, 1-3 sentences typically, max 6
-- Build on conversation naturally respecting the previous messages, do NOT repeat greetings
-- Ask follow-up questions when appropriate
-- Be encouraging and realistic
-
-BOUNDARIES:
-- Never diagnose health conditions
-- Provide info and support, not therapy
-- Suggest professional help when needed, especially for mentions of self-harm, suicide, or medical emergency
-- If the conversation flows off-topic, gently redirect
-    
 IMPORTANT:
-- DO NOT start your response with "FitBot:" - just respond directly
-- DO NOT repeat greetings if you've already greeted them
-- Keep track of what's been discussed and build on it"""
+- Do NOT start your response with "FitBot:".
+- Do NOT repeat greetings if the conversation history shows we have already greeted.
+- Speak naturally using "I" and "You"."""
 
-    def _build_prompt(self, user_input: str, kb_matches: List[Dict]) -> str:
-        """Build complete prompt with context and KB""" # builds the whole promtp that is being send to the ai model, indluces the previous system prompt, user message, contex(the message history up until now), relevant matched KB Q&A pairs and 
-        # Format conversation history
-        context = self._format_context()
-        
-        # Format KB matches
-        kb_info = ""
-        if kb_matches and any(m['score'] > 0 for m in kb_matches):
-            kb_info = "\n\nRELEVANT KNOWLEDGE BASE:\n"
-            for i, match in enumerate(kb_matches[:3], 1):
-                if match['score'] > 0:
-                    kb_info += f"{i}. Q: {match['question']}\n"
-                    kb_info += f"   A: {match['answer']}\n"
-                    kb_info += f"   Relevance: {match['score']:.2f}\n\n"
-        
-        return f"""CONVERSATION HISTORY:
-{context}
-
-CURRENT USER MESSAGE: "{user_input}"
-{kb_info}
-
-Instructions: 
-- This is a CONTINUING conversation
-- Keep your response SHORT (1-3 sentences)
-- Build naturally on what was said before
-- DO NOT start with "FitBot:" - respond directly
-- Be conversational and natural
-
-Your response:"""
-    
-    def _format_context(self) -> str:
-        """Format recent conversation for context"""
-        if len(self.messages) == 0:
-            return "(Start of conversation)"
-        
-        # Get last N messages based on config
-        recent = self.messages[-self.config.CONTEXT_WINDOW_SIZE:]
-        
-        if len(recent) == 0:
-            return "(Start of conversation)"
-        
-        formatted = ""
-        for msg in recent:
-            role = "User" if msg["role"] == "user" else "FitBot"
-            formatted += f"{role}: {msg['content']}\n"
-        
-        return formatted.strip()
-    
     def _add_message(self, role: str, content: str):
         """Add message to history"""
         self.messages.append({
@@ -334,10 +316,9 @@ Your response:"""
             "timestamp": datetime.now()
         })
         
-        # removes the oldest massege if the valuse of max conversation hisotry form the Config class is reached
+        # Removes the oldest message if max history is reached
         if len(self.messages) > self.config.MAX_CONVERSATION_HISTORY:
-            self.messages = self.messages[-self.config.MAX_CONVERSATION_HISTORY:]
-
+            self.messages.pop(0) # removes the first item
 
 # COMPLETELY NEW: GUI Version of ChatInterface
 class ChatInterface:
