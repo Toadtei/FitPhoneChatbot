@@ -68,14 +68,14 @@ class Logger:
 class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, instead of documents and vecotr database, we have Q&A pairs in json. 
     # TODO: move from jaccard similarity matching to sentecne embedings and vectorizing to match better based on meaning of the input.
     """Matches user queries with knowledge base""" 
-    
-    
+        
     def __init__(self, kb_path: str, logger: Logger):
         self.logger = logger
         self.kb = self._load_kb(kb_path)
-        self.stopwords = {"a", "an", "the", "is", "are", "was", "were",
-                         "in", "on", "at", "to", "for", "of", "and", "or"}
-    
+        self.stopwords = {"a", "an", "the", "is", "are", "was", "were", "in", "on", "at", "to", "for", "of", "and", "or"}
+        self._tokenized_cache = {}
+        self._build_token_cache()
+
     def _load_kb(self, path: str) -> List[Dict]:
         """Load knowledge base from JSON"""
         
@@ -96,24 +96,35 @@ class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, in
         self.logger.success(f"Loaded {len(kb)} KB entries")
         return kb
     
+    def _build_token_cache(self):
+        """Tokenize all KB quesitons on startup for faster matching"""
+        self.logger.info("Building KB token cache...")
+
+        for i, entry in enumerate(self.kb):
+            question_tokens = self._tokenize(entry['q'].lower())
+            self._tokenized_cache[i] = question_tokens
+
+        self.logger.success(f"Token cache built for {len(self._tokenized_cache)} entries")
+    
     def get_best_matches(self, user_input: str, top_k: int = 3) -> List[Dict]:
         """Get top K most relevant KB entries"""
         
         user_tokens = self._tokenize(user_input.lower())
-        
+    
         scores = []
-        for entry in self.kb:
-            question_tokens = self._tokenize(entry['q'].lower())
+        for i, entry in enumerate(self.kb):
+            # Uses cached tokens instead of tokenizing again 
+            question_tokens = self._tokenized_cache[i]
             score = self._jaccard_similarity(user_tokens, question_tokens)
-            
-            scores.append({
-                "question": entry['q'],
-                "answer": entry['a'],
-                "source": entry.get('source', ''),
-                "category": entry.get('category', 'general'),
-                "score": score
-            })
         
+        scores.append({
+            "question": entry['q'],
+            "answer": entry['a'],
+            "source": entry.get('source', ''),
+            "category": entry.get('category', 'general'),
+            "score": score
+        })
+    
         scores.sort(key=lambda x: x['score'], reverse=True)
         return scores[:top_k]
     
