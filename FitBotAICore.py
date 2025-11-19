@@ -32,13 +32,46 @@ class Config:
     KB_PATH = "knowledgebase.json"
     CONTEXT_WINDOW_SIZE = 8 # number of messages we are sending to the LLM to proccess and understand the context, 
     MAX_CONVERSATION_HISTORY = 10 #maybe for future, how many messages are we storing in genearl, can be later use for things like summarize the conversation
+    LOG_FILE = "fitbot.log"
+    
+
+class Logger:
+    """Simple logging utility that writes to file instead of console - code created with LLM help"""
+    
+    def __init__(self, log_file: str):
+        self.log_file = log_file
+        # Clear log file on startup
+        with open(self.log_file, 'w', encoding='utf-8') as f:
+            f.write(f"FitBot Log Started: {datetime.now()} ===\n\n")
+    
+    def log(self, message: str, level: str = "INFO"):
+        """Write a log entry with timestamp"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = f"[{timestamp}] {level}: {message}\n"
+        
+        with open(self.log_file, 'a', encoding='utf-8') as f:
+            f.write(log_entry)
+    
+    def error(self, message: str):
+        """Log an error"""
+        self.log(message, "ERROR")
+    
+    def info(self, message: str):
+        """Log general info"""
+        self.log(message, "INFO")
+    
+    def success(self, message: str):
+        """Log success message"""
+        self.log(message, "SUCCESS")
+
 
 class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, instead of documents and vecotr database, we have Q&A pairs in json. 
     # TODO: move from jaccard similarity matching to sentecne embedings and vectorizing to match better based on meaning of the input.
     """Matches user queries with knowledge base""" 
     
     
-    def __init__(self, kb_path: str):
+    def __init__(self, kb_path: str, logger: Logger):
+        self.logger = logger
         self.kb = self._load_kb(kb_path)
         self.stopwords = {"a", "an", "the", "is", "are", "was", "were",
                          "in", "on", "at", "to", "for", "of", "and", "or"}
@@ -48,7 +81,7 @@ class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, in
         
         # checks if the jsnon file exists with specifide path from class Config
         if not os.path.exists(path):
-            print(f"\nERROR: Knowledge base not found: {path}")
+            self.logger.error('Knowledge base not found: ', path)
             exit(1)
 
         # reads the json KB
@@ -57,9 +90,10 @@ class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, in
         
         #checks if all Q&A pairs have q (question) and a (answer) parameters
         if not all("q" in e and "a" in e for e in kb):
+            self.logger.error("KB validation failed: missing 'q' or 'a' fields")
             raise ValueError("Each KB entry must contain 'q' and 'a' fields.")
         
-        print(f"✓ Loaded {len(kb)} KB entries")
+        self.logger.success(f"Loaded {len(kb)} KB entries")
         return kb
     
     def get_best_matches(self, user_input: str, top_k: int = 3) -> List[Dict]:
@@ -100,25 +134,24 @@ class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, in
 class OllamaClient:
     """Ollama LLM client with streaming""" # handles connection with our model running in Ollama and streaming back the output
     
-    def __init__(self, model: str, endpoint: str):
+    def __init__(self, model: str, endpoint: str, logger: Logger):
         self.model = model
         self.endpoint = endpoint
+        self.logger = logger
         self._check_connection()
     
     def _check_connection(self):
         """Verify Ollama is running"""
-
-        #TODO: for production/demo, we should change printing out errors to the UI chat, lets create a log file and print it there
         try:
             import requests
             response = requests.get(f"{self.endpoint}/api/tags", timeout=2)
             if response.status_code == 200:
-                print(f"✓ Connected to Ollama: {self.model}")
+                self.logger.success(f"Connected to Ollama: {self.model}")
             else:
-                print(f"Ollama error (status {response.status_code})")
+                self.logger.error(f"Ollama returned status {response.status_code}")
                 exit(1)
         except Exception as e:
-            print(f"Cannot connect to Ollama: {e}")
+            self.logger.error(f"Cannot connect to Ollama: {e}")
             exit(1)
     
     def generate_stream(self, prompt: str, system_prompt: str = "", stream_callback=None):
@@ -160,18 +193,18 @@ class OllamaClient:
             return full_response
             
         except Exception as e:
-            error_msg = f"Generation error: {e}"
-            print(f"\n{error_msg}")
+            self.logger.error(f"Generation error: {e}")
             return "I'm having trouble generating a response. Please try again."
 
 
 class ConversationManager:
     """Manages conversation flow and context""" # This class handles the context of the conversation, keeping track of past messages, the overall mamangerm and uses KowledgeBaseMatcher to find best knowledge and then OllamaClient class to connect to the model.
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, logger: Logger):
         self.config = config
-        self.kb_matcher = KnowledgeBaseMatcher(config.KB_PATH)
-        self.ollama = OllamaClient(config.OLLAMA_MODEL, config.OLLAMA_ENDPOINT)
+        self.logger = logger
+        self.kb_matcher = KnowledgeBaseMatcher(config.KB_PATH, logger)
+        self.ollama = OllamaClient(config.OLLAMA_MODEL, config.OLLAMA_ENDPOINT, logger)
         self.messages = []
     
     def process_message(self, user_input: str, stream_callback=None) -> str:
@@ -299,9 +332,10 @@ Your response:"""
 class ChatInterface:
     """Tkinter GUI chat interface"""
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, logger: Logger):
         self.config = config
-        self.conversation = ConversationManager(config)
+        self.logger = logger
+        self.conversation = ConversationManager(config, logger)
         self.token_queue = queue.Queue()
         self.is_processing = False
         
@@ -522,7 +556,17 @@ What would you like to talk about?"""
 
 
 
+def main():
+    """Main entry point"""
+    config = Config()
+    logger = Logger(config.LOG_FILE)
+    logger.info("Starting FitBot")
+    chat = ChatInterface(config, logger)
+    chat.start()
 
+
+if __name__ == "__main__":
+    main()
 
 # OLD TERMINAL BASED CHAT INTERFACE
 
@@ -595,13 +639,3 @@ What would you like to talk about?"""
 
 # main entry point for this python app
 
-def main():
-    """Main entry point"""
-    print("Starting FitBot GUI...")
-    config = Config()
-    chat = ChatInterface(config)
-    chat.start()
-
-
-if __name__ == "__main__":
-    main()
