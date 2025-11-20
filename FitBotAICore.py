@@ -356,24 +356,50 @@ class ChatInterface:
         
         # Create main window
         self.root = tk.Tk()
-        self.root.title("FitBot - Healthy Smartphone Habits")
-        
-        # Launch in fullscreen/maximized
-        self.root.state('zoomed')  # For Windows
-        # Alternative for other platforms:
-        # self.root.attributes('-zoomed', True)  # Linux
-        # self.root.attributes('-fullscreen', True)  # macOS
-        
+        self.root.title("FitBot") # Shortened title looks cleaner
+        self.root.state('zoomed') 
         self.root.configure(bg="#1e1e1e")
         
-        # Colors
+        # --- WINDOWS DARK TITLE BAR HACK ---
+        # This forces the windows title bar to be black (Windows 10/11)
+        try:
+            import ctypes
+            # DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                int(self.root.frame(), 16), 20, ctypes.byref(ctypes.c_int(2)), 4
+            )
+        except Exception:
+            pass # Fails gracefully on non-Windows systems
+
+        # Try to change icon to a blank one (removes feather if possible)
+        # Without an external .ico file, this is the standard Tkinter workaround
+        try:
+            pixel = tk.PhotoImage(width=1, height=1)
+            self.root.iconphoto(False, pixel)
+        except Exception:
+            pass
+
+        # --- COLORS ---
         self.bg_color = "#1e1e1e"
-        self.chat_bg = "#2d2d2d"
-        self.user_bubble = "#3d5a80"
-        self.bot_bubble = "#2d4356"
+        self.chat_bg = "#252525" 
+        self.header_bg = "#CC5500" 
         self.text_color = "#e0e0e0"
-        self.input_bg = "#3d3d3d"
+        self.input_bg = "#333333"
+
+        # --- STYLE CONFIGURATION ---
+        style = ttk.Style()
+        style.theme_use('clam') 
         
+        # Refined scrollbar style to remove white artifacts
+        style.configure("Dark.Vertical.TScrollbar", 
+                        gripcount=0,
+                        background="#3d3d3d", 
+                        darkcolor="#3d3d3d", 
+                        lightcolor="#3d3d3d",
+                        troughcolor=self.chat_bg, # MATCHES CHAT BG
+                        bordercolor=self.chat_bg, 
+                        arrowcolor="#e0e0e0")
+
         self._create_widgets()
         self._show_welcome_message()
         
@@ -381,70 +407,99 @@ class ChatInterface:
         self._process_token_queue()
     
     def _create_widgets(self):
-        """Create GUI elements"""
+        """Create GUI elements - Phase 1 Fixed"""
         
-        # Header
-        header = tk.Frame(self.root, bg="#d17842", height=60)
+        # --- 1. INPUT AREA (Pack First to ensure visibility!) ---
+        input_container = tk.Frame(self.root, bg=self.bg_color)
+        # pack with side=BOTTOM first so it reserves space
+        input_container.pack(fill=tk.X, side=tk.BOTTOM, padx=50, pady=(0, 30))
+        
+        # Input Inner Frame (The dark bar background)
+        input_inner_frame = tk.Frame(input_container, bg=self.input_bg)
+        input_inner_frame.pack(fill=tk.X)
+        
+        # Text Input
+        self.input_field = tk.Text(
+            input_inner_frame,
+            height=3,
+            font=("Segoe UI", 11),
+            bg=self.input_bg,
+            fg="white",
+            relief=tk.FLAT,
+            wrap=tk.WORD,
+            insertbackground="white",
+            padx=10,
+            pady=10
+        )
+        self.input_field.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.input_field.bind("<Return>", self._on_enter)
+        self.input_field.bind("<Shift-Return>", lambda e: None)
+
+        # Send Button (Modified: No Stretch, Added Padding)
+        self.send_button = tk.Button(
+            input_inner_frame,
+            text="SEND",
+            command=self._send_message,
+            bg=self.header_bg,
+            fg="white",
+            font=("Segoe UI", 10, "bold"),
+            relief=tk.FLAT,
+            cursor="hand2",
+            width=10,
+            activebackground="#a04000",
+            activeforeground="white"
+        )
+        # Removed fill=tk.Y, added pady to create the "gap" inside the bar
+        self.send_button.pack(side=tk.RIGHT, padx=10, pady=2)
+
+
+        # --- 2. HEADER (Top) ---
+        header = tk.Frame(self.root, bg=self.header_bg, height=70)
         header.pack(fill=tk.X, side=tk.TOP)
         header.pack_propagate(False)
         
-        title = tk.Label(header, text="🤖 FitBot - Healthy Smartphone Habits", 
-                        font=("Arial", 20, "bold"),
-                        bg="#d17842", fg="white")
+        title = tk.Label(header, text="🤖 FitBot", 
+                        font=("Segoe UI", 22, "bold"),
+                        bg=self.header_bg, fg="white")
         title.pack(pady=15)
+
+
+        # --- 3. CHAT AREA (Middle - Fills remaining space) ---
+        # IMPORTANT: bg must match chat_bg so scrollbar trough isn't white
+        chat_container = tk.Frame(self.root, bg=self.chat_bg) 
+        chat_container.pack(fill=tk.BOTH, expand=True, padx=50, pady=(20, 20))
         
-        # Chat display area
-        chat_frame = tk.Frame(self.root, bg=self.chat_bg)
-        chat_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Custom Scrollbar
+        self.scrollbar = ttk.Scrollbar(chat_container, orient="vertical", style="Dark.Vertical.TScrollbar")
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        self.chat_display = scrolledtext.ScrolledText(
-            chat_frame,
+        # Main Chat Text Display
+        self.chat_display = tk.Text(
+            chat_container,
             wrap=tk.WORD,
-            font=("Arial", 11),
+            font=("Segoe UI", 11),
             bg=self.chat_bg,
             fg=self.text_color,
             relief=tk.FLAT,
             state=tk.DISABLED,
-            spacing1=2,
-            spacing3=2
+            padx=20, 
+            pady=20,
+            spacing1=5, 
+            spacing3=5,
+            yscrollcommand=self.scrollbar.set,
+            bd=0, # Remove border
+            highlightthickness=0 # Remove selection highlight border
         )
-        self.chat_display.pack(fill=tk.BOTH, expand=True)
+        self.chat_display.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
         
-        # Configure text tags
-        self.chat_display.tag_config("user", foreground="#7dd3fc", font=("Arial", 11, "bold"))
-        self.chat_display.tag_config("bot", foreground="#fb923c", font=("Arial", 11, "bold"))
-        self.chat_display.tag_config("thinking", foreground="#fb923c", font=("Arial", 11, "bold"))
+        # Link scrollbar
+        self.scrollbar.config(command=self.chat_display.yview)
         
-        # Input area
-        input_frame = tk.Frame(self.root, bg=self.bg_color)
-        input_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=10)
-        
-        self.input_field = tk.Text(
-            input_frame,
-            height=3,
-            font=("Arial", 11),
-            bg=self.input_bg,
-            fg=self.text_color,
-            relief=tk.FLAT,
-            wrap=tk.WORD
-        )
-        self.input_field.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-        self.input_field.bind("<Return>", self._on_enter)
-        self.input_field.bind("<Shift-Return>", lambda e: None)  # Allow Shift+Enter for newline
-        
-        self.send_button = tk.Button(
-            input_frame,
-            text="Send",
-            command=self._send_message,
-            bg="#d17842",
-            fg="white",
-            font=("Arial", 12, "bold"),
-            relief=tk.FLAT,
-            cursor="hand2",
-            width=10
-        )
-        self.send_button.pack(side=tk.RIGHT)
-        
+        # Tags
+        self.chat_display.tag_config("user", foreground="#7dd3fc", font=("Segoe UI", 11, "bold"))
+        self.chat_display.tag_config("bot", foreground="#fb923c", font=("Segoe UI", 11, "bold"))
+        self.chat_display.tag_config("thinking", foreground="#888888", font=("Segoe UI", 10, "italic"))
+
         self.input_field.focus()
     
     def _show_welcome_message(self):
@@ -454,8 +509,13 @@ class ChatInterface:
 I'm here to help you develop healthier smartphone habits!
 
 Topics I can help with:
-📱 Screen time • 😰 FOMO • 🔕 Notifications • 😴 Sleep
-🧘 Digital detox • 🎯 Focus • 📊 Social media
+📱 Screen time 
+😰 FOMO
+🔕 Notifications
+😴 Sleep
+🧘 Digital detox
+🎯 Focus
+📊 Social media
 
 What would you like to talk about?"""
         self._append_message("bot", welcome)
