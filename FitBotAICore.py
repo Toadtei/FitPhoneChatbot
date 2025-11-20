@@ -24,6 +24,7 @@ import queue
 import tkinter as tk
 from tkinter import scrolledtext, ttk
 
+# pip install sentence-transformers
 from sentence_transformers import SentenceTransformer, util
 import numpy as np
 
