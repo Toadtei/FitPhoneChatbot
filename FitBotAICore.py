@@ -69,35 +69,37 @@ class Logger:
         self.log(message, "SUCCESS")
 
 
-class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, instead of documents and vecotr database, we have Q&A pairs in json. 
+class KnowledgeBaseMatcher: 
     """
-    Matches user queries with KB using sentence embeddings
-    (semantic similarity instead of keyword overlap).
+    Matches user queries with KB using sentence embeddings.
+    This replaces the old Token Cache with an Embedding Cache.
     """
     
-    def __init__(self, kb_path: str):
+    def __init__(self, kb_path: str, logger: Logger):
         self.logger = logger
         self.kb = self._load_kb(kb_path)
-        self.stopwords = {"a", "an", "the", "is", "are", "was", "were", "in", "on", "at", "to", "for", "of", "and", "or"}
-        self._tokenized_cache = {}
-        self._build_token_cache()
         
-        print("Loading sentence embedding model (all-MiniLM-L6-v2)...")
+        # 1. Load the Model (The heaviest part, happens once, takes some time
+        self.logger.info("Loading sentence embedding model (all-MiniLM-L6-v2)...")
         self.model = SentenceTransformer("all-MiniLM-L6-v2")
         
-        # Prepare text for embedding
+        # BUILD THE CACHE
+        # We pre-calculate the "meaning" of every KB entry now.
+        # This is much faster than doing it every time a user asks a question.
         kb_texts = []
         for entry in self.kb:
-            kb_texts.append(entry["q"] + " " + entry["a"])
+            # We combine Question and Answer for better context matching
+            kb_texts.append(f"{entry['q']} {entry['a']}")
         
-        print(f"Encoding {len(kb_texts)} KB entries into embeddings...")
-        # Convert all KB texts into embedding vectors
-        # normalize_embeddings=True makes cosine similarity easier and more stable
+        self.logger.info(f"Building Embedding Cache for {len(kb_texts)} entries...")
+        
+        # This variable 'self.kb_embeddings' IS the cache, streos vecotrs of KB in memory
         self.kb_embeddings = self.model.encode(
             kb_texts,
-            normalize_embeddings=True
+            normalize_embeddings=True,
+            convert_to_tensor=True
         )
-        print("KB embeddings ready")
+        self.logger.success("KB Embedding Cache ready")
 
     def _load_kb(self, path: str) -> List[Dict]:
         """Load knowledge base from JSON"""
@@ -119,16 +121,6 @@ class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, in
         self.logger.success(f"Loaded {len(kb)} KB entries")
         return kb
     
-    def _build_token_cache(self):
-        """Tokenize all KB quesitons on startup for faster matching"""
-        self.logger.info("Building KB token cache...")
-
-        for i, entry in enumerate(self.kb):
-            question_tokens = self._tokenize(entry['q'].lower())
-            self._tokenized_cache[i] = question_tokens
-
-        self.logger.success(f"Token cache built for {len(self._tokenized_cache)} entries")
-    
     def get_best_matches(self, user_input: str, top_k: int = 3) -> List[Dict]:
         """
         Find the KB entries with closest meaning to the user's message,
@@ -141,7 +133,8 @@ class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, in
         # Convert the user message into an embedding vector
         query_embedding = self.model.encode(
             user_input,
-            normalize_embeddings=True
+            normalize_embeddings=True,
+            convert_to_tensor=True
         )
 
         # Compare user embedding with all KB embeddings
@@ -264,7 +257,7 @@ class ConversationManager:
         kb_context_str = ""
         
         # relevancy treshhold check
-        if kb_matches and kb_matches[0]['score'] > 0.15:
+        if kb_matches and kb_matches[0]['score'] > 0.35:
             best_match = kb_matches[0]
             #  string to inject into the System Prompt
             kb_context_str = f"""
