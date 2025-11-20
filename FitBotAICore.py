@@ -24,9 +24,11 @@ import queue
 import tkinter as tk
 from tkinter import scrolledtext, ttk
 
+
 # pip install sentence-transformers
 from sentence_transformers import SentenceTransformer, util
 import numpy as np
+
 
 
 class Config:
@@ -187,7 +189,9 @@ class OllamaClient:
         except Exception as e:
             self.logger.error(f"Cannot connect to Ollama: {e}")
     
+
     def generate_stream(self, messages: List[Dict], stream_callback=None):
+
         """Generate response with streaming output"""
         #UPDATED to send strucutred messages isnted of raw text
         import requests
@@ -506,7 +510,7 @@ class ChatInterface:
         """Display welcome message"""
         welcome = """Welcome to FitBot! 🎉
 
-I'm here to help you develop healthier smartphone habits!
+# I'm here to help you develop healthier smartphone habits!
 
 Topics I can help with:
 📱 Screen time 
@@ -638,6 +642,7 @@ def main():
     logger.info("Starting FitBot")
     chat = ChatInterface(config, logger)
     chat.start()
+
 
 
 if __name__ == "__main__":
