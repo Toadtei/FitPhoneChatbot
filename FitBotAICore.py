@@ -18,10 +18,17 @@ import re
 import os
 from datetime import datetime
 from typing import List, Dict, Set
-import sys, time, threading
+import threading
+import queue
 
 import tkinter as tk
 from tkinter import scrolledtext, ttk
+
+
+# pip install sentence-transformers
+from sentence_transformers import SentenceTransformer, util
+import numpy as np
+
 
 
 class Config:
@@ -31,23 +38,77 @@ class Config:
     KB_PATH = "knowledgebase.json"
     CONTEXT_WINDOW_SIZE = 8 # number of messages we are sending to the LLM to proccess and understand the context, 
     MAX_CONVERSATION_HISTORY = 10 #maybe for future, how many messages are we storing in genearl, can be later use for things like summarize the conversation
+    LOG_FILE = "fitbot.log"
+    
 
-class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, instead of documents and vecotr database, we have Q&A pairs in json. 
-    # TODO: move from jaccard similarity matching to sentecne embedings and vectorizing to match better based on meaning of the input.
-    """Matches user queries with knowledge base""" 
+class Logger:
+    """Simple logging utility that writes to file instead of console - code created with LLM help"""
     
+    def __init__(self, log_file: str):
+        self.log_file = log_file
+        # Clear log file on startup
+        with open(self.log_file, 'w', encoding='utf-8') as f:
+            f.write(f"FitBot Log Started: {datetime.now()} ===\n\n")
     
-    def __init__(self, kb_path: str):
+    def log(self, message: str, level: str = "INFO"):
+        """Write a log entry with timestamp"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = f"[{timestamp}] {level}: {message}\n"
+        
+        with open(self.log_file, 'a', encoding='utf-8') as f:
+            f.write(log_entry)
+    
+    def error(self, message: str):
+        """Log an error"""
+        self.log(message, "ERROR")
+    
+    def info(self, message: str):
+        """Log general info"""
+        self.log(message, "INFO")
+    
+    def success(self, message: str):
+        """Log success message"""
+        self.log(message, "SUCCESS")
+
+
+class KnowledgeBaseMatcher: 
+    """
+    Matches user queries with KB using sentence embeddings.
+    This replaces the old Token Cache with an Embedding Cache.
+    """
+    
+    def __init__(self, kb_path: str, logger: Logger):
+        self.logger = logger
         self.kb = self._load_kb(kb_path)
-        self.stopwords = {"a", "an", "the", "is", "are", "was", "were",
-                         "in", "on", "at", "to", "for", "of", "and", "or"}
-    
+        
+        # 1. Load the Model (The heaviest part, happens once, takes some time
+        self.logger.info("Loading sentence embedding model (all-MiniLM-L6-v2)...")
+        self.model = SentenceTransformer("all-MiniLM-L6-v2")
+        
+        # BUILD THE CACHE
+        # We pre-calculate the "meaning" of every KB entry now.
+        # This is much faster than doing it every time a user asks a question.
+        kb_texts = []
+        for entry in self.kb:
+            # We combine Question and Answer for better context matching
+            kb_texts.append(f"{entry['q']} {entry['a']}")
+        
+        self.logger.info(f"Building Embedding Cache for {len(kb_texts)} entries...")
+        
+        # This variable 'self.kb_embeddings' IS the cache, streos vecotrs of KB in memory
+        self.kb_embeddings = self.model.encode(
+            kb_texts,
+            normalize_embeddings=True,
+            convert_to_tensor=True
+        )
+        self.logger.success("KB Embedding Cache ready")
+
     def _load_kb(self, path: str) -> List[Dict]:
         """Load knowledge base from JSON"""
         
         # checks if the jsnon file exists with specifide path from class Config
         if not os.path.exists(path):
-            print(f"\nERROR: Knowledge base not found: {path}")
+            self.logger.error(f'Knowledge base not found: {path}')
             exit(1)
 
         # reads the json KB
@@ -56,98 +117,109 @@ class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, in
         
         #checks if all Q&A pairs have q (question) and a (answer) parameters
         if not all("q" in e and "a" in e for e in kb):
+            self.logger.error("KB validation failed: missing 'q' or 'a' fields")
             raise ValueError("Each KB entry must contain 'q' and 'a' fields.")
         
-        print(f"✓ Loaded {len(kb)} KB entries")
+        self.logger.success(f"Loaded {len(kb)} KB entries")
         return kb
     
     def get_best_matches(self, user_input: str, top_k: int = 3) -> List[Dict]:
-        """Get top K most relevant KB entries"""
-        
-        user_tokens = self._tokenize(user_input.lower())
-        
-        scores = []
-        for entry in self.kb:
-            question_tokens = self._tokenize(entry['q'].lower())
-            score = self._jaccard_similarity(user_tokens, question_tokens)
-            
-            scores.append({
-                "question": entry['q'],
-                "answer": entry['a'],
-                "source": entry.get('source', ''),
-                "category": entry.get('category', 'general'),
+        """
+        Find the KB entries with closest meaning to the user's message,
+        using cosine similarity between embeddings.
+        """
+        user_input = user_input.strip()
+        if not user_input:
+            return []
+
+        # Convert the user message into an embedding vector
+        query_embedding = self.model.encode(
+            user_input,
+            normalize_embeddings=True,
+            convert_to_tensor=True
+        )
+
+        # Compare user embedding with all KB embeddings
+        # util.cos_sim returns a similarity score for each KB entry
+        sims = util.cos_sim(query_embedding, self.kb_embeddings)[0].cpu().tolist()
+
+        # Sort KB entries by highest similarity score
+        ranked_indices = sorted(
+            range(len(sims)),
+            key=lambda i: sims[i],
+            reverse=True
+        )[:top_k]
+
+        # Build the final results
+        results: List[Dict] = []
+        for idx in ranked_indices:
+            entry = self.kb[idx]
+            score = float(sims[idx])
+
+            results.append({
+                "question": entry["q"],
+                "answer": entry["a"],
+                "source": entry.get("source", ""),
+                "category": entry.get("category", "general"),
                 "score": score
             })
-        
-        scores.sort(key=lambda x: x['score'], reverse=True)
-        return scores[:top_k]
-    
-    def _tokenize(self, text: str) -> Set[str]:
-        """Extract meaningful words"""
-        words = re.findall(r'\b\w+\b', text)
-        return {w for w in words if len(w) >= 3 and w not in self.stopwords}
-    
-    def _jaccard_similarity(self, set1: Set[str], set2: Set[str]) -> float:
-        """Calculate similarity score"""
-        if not set1 or not set2:
-            return 0.0
-        intersection = len(set1 & set2)
-        union = len(set1 | set2)
-        return intersection / union if union > 0 else 0.0
+
+        return results
 
 
 class OllamaClient:
     """Ollama LLM client with streaming""" # handles connection with our model running in Ollama and streaming back the output
     
-    def __init__(self, model: str, endpoint: str):
+    def __init__(self, model: str, endpoint: str, logger: Logger):
         self.model = model
         self.endpoint = endpoint
+        self.logger = logger
         self._check_connection()
     
     def _check_connection(self):
         """Verify Ollama is running"""
-
-        #TODO: for production/demo, we should change printing out errors to the UI chat, lets create a log file and print it there
         try:
             import requests
             response = requests.get(f"{self.endpoint}/api/tags", timeout=2)
             if response.status_code == 200:
-                print(f"✓ Connected to Ollama: {self.model}")
+                self.logger.success(f"Connected to Ollama: {self.model}")
             else:
-                print(f"Ollama error (status {response.status_code})")
-                exit(1)
+                self.logger.error(f"Ollama returned status {response.status_code}")
+
         except Exception as e:
-            print(f"Cannot connect to Ollama: {e}")
-            exit(1)
+            self.logger.error(f"Cannot connect to Ollama: {e}")
     
-    def generate_stream(self, prompt: str, system_prompt: str = "", stream_callback=None):
+
+    def generate_stream(self, messages: List[Dict], stream_callback=None):
+
         """Generate response with streaming output"""
+        #UPDATED to send strucutred messages isnted of raw text
         import requests
         
         payload = {
             "model": self.model,
-            "prompt": prompt,
-            "system": system_prompt,
+            "messages": messages,
             "stream": True
         }
+        full_response = ""
         
         try:
             response = requests.post(
-                f"{self.endpoint}/api/generate",
+                f"{self.endpoint}/api/chat", # prevously was geenrate by mistake
                 json=payload,
                 stream=True,
                 timeout=60
             )
             
-            full_response = ""
+            response.raise_for_status()
             for line in response.iter_lines():
                 if line:
                     try:
                         chunk = json.loads(line)
-                        token = chunk.get("response", "")
-                        if token:
+                        # The chat API returns content in 'message' -  'content'
+                        if 'message' in chunk and 'content' in chunk['message']:
+                            token = chunk['message']['content']
                             full_response += token
-                            # Nwe call callback for GUI update if provided
                             if stream_callback:
                                 stream_callback(token)
                         
@@ -159,129 +231,110 @@ class OllamaClient:
             return full_response
             
         except Exception as e:
-            error_msg = f"Generation error: {e}"
-            print(f"\n{error_msg}")
-            return "I'm having trouble generating a response. Please try again."
+            error_msg = f"Error connecting to AI: {str(e)}"
+            self.logger.error(error_msg)
+            if stream_callback:
+                stream_callback(error_msg)
+            return error_msg
 
 
 class ConversationManager:
-    """Manages conversation flow and context""" # This class handles the context of the conversation, keeping track of past messages, the overall mamangerm and uses KowledgeBaseMatcher to find best knowledge and then OllamaClient class to connect to the model.
+    """Manages conversation flow and context""" 
+    # This class handles the context, KB retrieval, and constructing the message list for the Chat API
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, logger: Logger):
         self.config = config
-        self.kb_matcher = KnowledgeBaseMatcher(config.KB_PATH)
-        self.ollama = OllamaClient(config.OLLAMA_MODEL, config.OLLAMA_ENDPOINT)
-        self.messages = []
+        self.logger = logger
+        self.kb_matcher = KnowledgeBaseMatcher(config.KB_PATH, logger)
+        self.ollama = OllamaClient(config.OLLAMA_MODEL, config.OLLAMA_ENDPOINT, logger)
+        self.messages = [] 
+        # Stores messages as list of simple dicts: {"role": "user", "content": "..."}
     
     def process_message(self, user_input: str, stream_callback=None) -> str:
         """Process user message and generate response"""
-        self._add_message("user", user_input)
         
         # Get KB matches
-        kb_matches = self.kb_matcher.get_best_matches(user_input, top_k=3)
+        kb_matches = self.kb_matcher.get_best_matches(user_input, top_k=2)
         
-        # Build prompt
-        system_prompt = self._get_system_prompt()
-        user_prompt = self._build_prompt(user_input, kb_matches)
+        # Check matches and extract source
+        match_source = None
+        kb_context_str = ""
         
+        # relevancy treshhold check
+        if kb_matches and kb_matches[0]['score'] > 0.35:
+            best_match = kb_matches[0]
+            #  string to inject into the System Prompt
+            kb_context_str = f"""
+RELEVANT KNOWLEDGE BASE INFO:
+Question: {best_match['question']}
+Answer: {best_match['answer']}
+"""
+            if best_match.get('source'):
+                match_source = best_match['source']
+
+        api_messages = []
         
-        response = self.ollama.generate_stream(user_prompt, system_prompt, stream_callback)
+        # A: System Prompt With KB info injected
+        base_system_prompt = self._get_system_prompt()
+        if kb_context_str:
+            full_system_content = base_system_prompt + kb_context_str
+        else:
+            full_system_content = base_system_prompt + "\nNo specific Knowledge Base info found for this query. Answer generally based on healthy digital habits."
+            
+        api_messages.append({"role": "system", "content": full_system_content})
         
-        response = re.sub(r'^FitBot:\s*', '', response.strip(), flags=re.IGNORECASE)
+        # Chat History (Last N messages)
+        # We iterate through self.messages which are already in format {"role": "...", "content": "..."}
+        recent_history = self.messages[-self.config.CONTEXT_WINDOW_SIZE:]
+    
+        # This leaves the 'datetime' object behind so it is not send to the ai model
+        for msg in recent_history:
+            api_messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+            
+        #Current User Input
+        api_messages.append({"role": "user", "content": user_input})
+
+        # Send to Ollama (Chat Mode)
+        response_text = self.ollama.generate_stream(api_messages, stream_callback)
         
-        if kb_matches and kb_matches[0]['score'] > 0 and kb_matches[0].get('source'):
-            source_text = f"\n\nSource: {kb_matches[0]['source']}"
-            response += source_text
+        # Post-processing-Removes "FitBot:" if the model accidentally outputted it
+        response_text = re.sub(r'^FitBot:\s*', '', response_text.strip(), flags=re.IGNORECASE)
+        
+        # 6. Adds Source
+        if match_source and len(response_text) > 5:
+            source_text = f"\n\nSource: {match_source}"
+            response_text += source_text
             if stream_callback:
                 stream_callback(source_text)
         
-        self._add_message("assistant", response)
-        return response
+        # Save to history
+        self._add_message("user", user_input)
+        self._add_message("assistant", response_text)
+        
+        return response_text
     
     def _get_system_prompt(self) -> str:
-        """System prompt defining bot personality""" # the base prompt, this prompt defines how our ai model should act, SYSTEM PROMPT, 
-        #TODO: prompt engineering, experiments and research how to imporve and get better results
-        return """You are FitBot, a friendly AI assistant helping young adults with healthy smartphone habits.
+        """System prompt defining bot personality""" 
+        # UPDATED: for better Chat API performance
+        return """You are FitBot, a down-to-earth but supportive AI assistant helping young adults with healthy smartphone habits.
 
-PERSONALITY:
-- Warm, conversational, supportive friend
-- Empathetic and non-judgmental
-- Casual natural language, not preachy
-- Personal and relatable
+CORE INSTRUCTIONS:
+1. You are a supportive friend, not a robot.
+3. Tone: Causal, direct, calm, and empathetic when required. 
+2. Keep responses SHORT (2-4 sentences max). Do not lecture.
+3. If RELEVANT KNOWLEDGE BASE INFO is provided below, use it as the primary source of truth.
+4. If the user is just saying "hi", greeting you, or engages in normal conversation reply naturally without pushing advice, be a supportive and listeing friend.
+5. If the user asks a question and NO KB INFO is provided, give general, safe advice about digital well-being, but disclose that this information is not in your knowledgebase yet.
+5. SAFETY: Never diagnose medical conditions. If a user mentions self-harm or severe distress, suggest professional help immediately.
 
-KNOWLEDGE BASE USAGE:
-- Use KB information as foundation for factual claims
-- Do not halucinate
-- For greetings/chitchat, respond naturally without forcing KB info
-- Combine KB entries naturally when relevant
-- If user asks something not in KB, acknowledge and inform about that but offer related topics
-
-RESPONSE STYLE:
-- Address their SPECIFIC situation
-- Keep responses SHORT and conversational, 1-3 sentences typically, max 6,
-- Build on conversation naturally respecting the previous messages, do NOT repeat greetings
-- Ask follow-up questions when appropriate
-- Be encouraging and realistic
-
-BOUNDARIES:
-- Never diagnose health conditions
-- Provide info and support, not therapy
-- Suggest professional help when needed, especially for mentiones of self-harm, suicide, or medical emergency
-- If the conversation flows off-topic, gently redirect
-    
 IMPORTANT:
-- DO NOT start your response with "FitBot:" - just respond directly
-- DO NOT repeat greetings if you've already greeted them
-- Keep track of what's been discussed and build on it"""
+- Do NOT start your response with "FitBot:".
+- Do NOT repeat greetings if the conversation history shows we have already greeted.
+- Speak naturally using "I" and "You"."""
 
-    def _build_prompt(self, user_input: str, kb_matches: List[Dict]) -> str:
-        """Build complete prompt with context and KB""" # builds the whole promtp that is being send to the ai model, indluces the previous system prompt, user message, contex(the message history up until now), relevant matched KB Q&A pairs and 
-        # Format conversation history
-        context = self._format_context()
-        
-        # Format KB matches
-        kb_info = ""
-        if kb_matches and any(m['score'] > 0 for m in kb_matches):
-            kb_info = "\n\nRELEVANT KNOWLEDGE BASE:\n"
-            for i, match in enumerate(kb_matches[:3], 1):
-                if match['score'] > 0:
-                    kb_info += f"{i}. Q: {match['question']}\n"
-                    kb_info += f"   A: {match['answer']}\n"
-                    kb_info += f"   Relevance: {match['score']:.2f}\n\n"
-        
-        return f"""CONVERSATION HISTORY:
-{context}
-
-CURRENT USER MESSAGE: "{user_input}"
-{kb_info}
-
-Instructions: 
-- This is a CONTINUING conversation
-- Keep your response SHORT (1-3 sentences)
-- Build naturally on what was said before
-- DO NOT start with "FitBot:" - respond directly
-- Be conversational and natural
-
-Your response:"""
-    
-    def _format_context(self) -> str:
-        """Format recent conversation for context"""
-        if len(self.messages) == 0:
-            return "(Start of conversation)"
-        
-        # Get last N messages based on config
-        recent = self.messages[-self.config.CONTEXT_WINDOW_SIZE:]
-        
-        if len(recent) == 0:
-            return "(Start of conversation)"
-        
-        formatted = ""
-        for msg in recent:
-            role = "User" if msg["role"] == "user" else "FitBot"
-            formatted += f"{role}: {msg['content']}\n"
-        
-        return formatted.strip()
-    
     def _add_message(self, role: str, content: str):
         """Add message to history"""
         self.messages.append({
@@ -290,114 +343,185 @@ Your response:"""
             "timestamp": datetime.now()
         })
         
-        # removes the oldest massege if the valuse of max conversation hisotry form the Config class is reached
+        # Removes the oldest message if max history is reached
         if len(self.messages) > self.config.MAX_CONVERSATION_HISTORY:
-            self.messages = self.messages[-self.config.MAX_CONVERSATION_HISTORY:]
-
+            self.messages.pop(0) # removes the first item
 
 # COMPLETELY NEW: GUI Version of ChatInterface
 class ChatInterface:
     """Tkinter GUI chat interface"""
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, logger: Logger):
         self.config = config
-        self.conversation = ConversationManager(config)
+        self.logger = logger
+        self.conversation = ConversationManager(config, logger)
+        self.token_queue = queue.Queue()
+        self.is_processing = False
         
         # Create main window
         self.root = tk.Tk()
-        self.root.title("FitBot - Healthy Smartphone Habits")
-        self.root.geometry("800x600")
+        self.root.title("FitBot") # Shortened title looks cleaner
+        self.root.state('zoomed') 
         self.root.configure(bg="#1e1e1e")
         
-        # Colors (Claude-like theme)
+        # --- WINDOWS DARK TITLE BAR HACK ---
+        # This forces the windows title bar to be black (Windows 10/11)
+        try:
+            import ctypes
+            # DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                int(self.root.frame(), 16), 20, ctypes.byref(ctypes.c_int(2)), 4
+            )
+        except Exception:
+            pass # Fails gracefully on non-Windows systems
+
+        # Try to change icon to a blank one (removes feather if possible)
+        # Without an external .ico file, this is the standard Tkinter workaround
+        try:
+            pixel = tk.PhotoImage(width=1, height=1)
+            self.root.iconphoto(False, pixel)
+        except Exception:
+            pass
+
+        # --- COLORS ---
         self.bg_color = "#1e1e1e"
-        self.chat_bg = "#2d2d2d"
-        self.user_bubble = "#3d5a80"
-        self.bot_bubble = "#2d4356"
+        self.chat_bg = "#252525" 
+        self.header_bg = "#CC5500" 
         self.text_color = "#e0e0e0"
-        self.input_bg = "#3d3d3d"
+        self.input_bg = "#333333"
+
+        # --- STYLE CONFIGURATION ---
+        style = ttk.Style()
+        style.theme_use('clam') 
         
+        # Refined scrollbar style to remove white artifacts
+        style.configure("Dark.Vertical.TScrollbar", 
+                        gripcount=0,
+                        background="#3d3d3d", 
+                        darkcolor="#3d3d3d", 
+                        lightcolor="#3d3d3d",
+                        troughcolor=self.chat_bg, # MATCHES CHAT BG
+                        bordercolor=self.chat_bg, 
+                        arrowcolor="#e0e0e0")
+
         self._create_widgets()
         self._show_welcome_message()
+        
+        # Start token processing loop
+        self._process_token_queue()
     
     def _create_widgets(self):
-        """Create GUI elements"""
+        """Create GUI elements - Phase 1 Fixed"""
         
-        # Header
-        header = tk.Frame(self.root, bg="#d17842", height=60)
+        # --- 1. INPUT AREA (Pack First to ensure visibility!) ---
+        input_container = tk.Frame(self.root, bg=self.bg_color)
+        # pack with side=BOTTOM first so it reserves space
+        input_container.pack(fill=tk.X, side=tk.BOTTOM, padx=50, pady=(0, 30))
+        
+        # Input Inner Frame (The dark bar background)
+        input_inner_frame = tk.Frame(input_container, bg=self.input_bg)
+        input_inner_frame.pack(fill=tk.X)
+        
+        # Text Input
+        self.input_field = tk.Text(
+            input_inner_frame,
+            height=3,
+            font=("Segoe UI", 11),
+            bg=self.input_bg,
+            fg="white",
+            relief=tk.FLAT,
+            wrap=tk.WORD,
+            insertbackground="white",
+            padx=10,
+            pady=10
+        )
+        self.input_field.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.input_field.bind("<Return>", self._on_enter)
+        self.input_field.bind("<Shift-Return>", lambda e: None)
+
+        # Send Button (Modified: No Stretch, Added Padding)
+        self.send_button = tk.Button(
+            input_inner_frame,
+            text="SEND",
+            command=self._send_message,
+            bg=self.header_bg,
+            fg="white",
+            font=("Segoe UI", 10, "bold"),
+            relief=tk.FLAT,
+            cursor="hand2",
+            width=10,
+            activebackground="#a04000",
+            activeforeground="white"
+        )
+        # Removed fill=tk.Y, added pady to create the "gap" inside the bar
+        self.send_button.pack(side=tk.RIGHT, padx=10, pady=2)
+
+
+        # --- 2. HEADER (Top) ---
+        header = tk.Frame(self.root, bg=self.header_bg, height=70)
         header.pack(fill=tk.X, side=tk.TOP)
         header.pack_propagate(False)
         
-        title = tk.Label(header, text="🤖 FitBot", font=("Arial", 20, "bold"),
-                        bg="#d17842", fg="white")
+        title = tk.Label(header, text="🤖 FitBot", 
+                        font=("Segoe UI", 22, "bold"),
+                        bg=self.header_bg, fg="white")
         title.pack(pady=15)
+
+
+        # --- 3. CHAT AREA (Middle - Fills remaining space) ---
+        # IMPORTANT: bg must match chat_bg so scrollbar trough isn't white
+        chat_container = tk.Frame(self.root, bg=self.chat_bg) 
+        chat_container.pack(fill=tk.BOTH, expand=True, padx=50, pady=(20, 20))
         
-        # Chat display area
-        chat_frame = tk.Frame(self.root, bg=self.chat_bg)
-        chat_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Custom Scrollbar
+        self.scrollbar = ttk.Scrollbar(chat_container, orient="vertical", style="Dark.Vertical.TScrollbar")
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        self.chat_display = scrolledtext.ScrolledText(
-            chat_frame,
+        # Main Chat Text Display
+        self.chat_display = tk.Text(
+            chat_container,
             wrap=tk.WORD,
-            font=("Arial", 11),
+            font=("Segoe UI", 11),
             bg=self.chat_bg,
             fg=self.text_color,
             relief=tk.FLAT,
             state=tk.DISABLED,
-            spacing1=5,
-            spacing3=5
+            padx=20, 
+            pady=20,
+            spacing1=5, 
+            spacing3=5,
+            yscrollcommand=self.scrollbar.set,
+            bd=0, # Remove border
+            highlightthickness=0 # Remove selection highlight border
         )
-        self.chat_display.pack(fill=tk.BOTH, expand=True)
+        self.chat_display.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
         
-        # Configure text tags for styling
-        self.chat_display.tag_config("user", foreground="#7dd3fc", font=("Arial", 11, "bold"))
-        self.chat_display.tag_config("bot", foreground="#fb923c", font=("Arial", 11, "bold"))
-        self.chat_display.tag_config("thinking", foreground="#888888", font=("Arial", 10, "italic"))
+        # Link scrollbar
+        self.scrollbar.config(command=self.chat_display.yview)
         
-        # Input area
-        input_frame = tk.Frame(self.root, bg=self.bg_color)
-        input_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=10)
-        
-        self.input_field = tk.Text(
-            input_frame,
-            height=3,
-            font=("Arial", 11),
-            bg=self.input_bg,
-            fg=self.text_color,
-            relief=tk.FLAT,
-            wrap=tk.WORD
-        )
-        self.input_field.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-        self.input_field.bind("<Return>", self._on_enter)
-        self.input_field.bind("<Shift-Return>", lambda e: None)  # Allow Shift+Enter for newline
-        
-        self.send_button = tk.Button(
-            input_frame,
-            text="Send",
-            command=self._send_message,
-            bg="#d17842",
-            fg="white",
-            font=("Arial", 12, "bold"),
-            relief=tk.FLAT,
-            cursor="hand2",
-            width=10
-        )
-        self.send_button.pack(side=tk.RIGHT)
-        
+        # Tags
+        self.chat_display.tag_config("user", foreground="#7dd3fc", font=("Segoe UI", 11, "bold"))
+        self.chat_display.tag_config("bot", foreground="#fb923c", font=("Segoe UI", 11, "bold"))
+        self.chat_display.tag_config("thinking", foreground="#888888", font=("Segoe UI", 10, "italic"))
+
         self.input_field.focus()
     
     def _show_welcome_message(self):
         """Display welcome message"""
         welcome = """Welcome to FitBot! 🎉
 
-I'm here to help you develop healthier smartphone habits!
+# I'm here to help you develop healthier smartphone habits!
 
 Topics I can help with:
-📱 Screen time • 😰 FOMO • 🔕 Notifications • 😴 Sleep
-🧘 Digital detox • 🎯 Focus • 📊 Social media
+📱 Screen time 
+😰 FOMO
+🔕 Notifications
+😴 Sleep
+🧘 Digital detox
+🎯 Focus
+📊 Social media
 
-What would you like to talk about?
-"""
+What would you like to talk about?"""
         self._append_message("bot", welcome)
     
     def _append_message(self, role: str, message: str, tag=None):
@@ -408,6 +532,8 @@ What would you like to talk about?
             self.chat_display.insert(tk.END, "You: ", "user")
         elif role == "bot":
             self.chat_display.insert(tk.END, "FitBot: ", "bot")
+        elif role == "thinking":
+            self.chat_display.insert(tk.END, "FitBot: ", "thinking")
         
         if tag:
             self.chat_display.insert(tk.END, message + "\n\n", tag)
@@ -432,6 +558,9 @@ What would you like to talk about?
     
     def _send_message(self):
         """Send user message"""
+        if self.is_processing:
+            return
+            
         user_input = self.input_field.get("1.0", tk.END).strip()
         
         if not user_input:
@@ -444,11 +573,12 @@ What would you like to talk about?
         self._append_message("user", user_input)
         
         # Disable input while processing
+        self.is_processing = True
         self.send_button.config(state=tk.DISABLED)
         self.input_field.config(state=tk.DISABLED)
         
         # Show thinking indicator
-        self._append_message("bot", "🤔 Thinking...", "thinking")
+        self._append_message("thinking", "🤔 Thinking...")
         
         # Process in background thread
         threading.Thread(target=self._process_response, args=(user_input,), daemon=True).start()
@@ -456,43 +586,47 @@ What would you like to talk about?
     def _process_response(self, user_input: str):
         """Process message in background thread"""
         
-        # Callback for streaming tokens to GUI
+        # Callback to queue tokens
         def stream_callback(token):
-            self.root.after(0, lambda: self._append_text(token))
+            self.token_queue.put(('token', token))
         
-        # Remove thinking indicator
-        self.root.after(0, self._remove_thinking)
+        # Signal to remove thinking and start response
+        self.token_queue.put(('start', None))
         
-        # Start bot response label
-        self.root.after(0, lambda: self._start_bot_response())
-        
-        # Generate response with streaming
+        # Generate response
         self.conversation.process_message(user_input, stream_callback)
         
-        # Add spacing after response
-        self.root.after(0, lambda: self._append_text("\n\n"))
+        # Signal completion
+        self.token_queue.put(('done', None))
+    
+    def _process_token_queue(self):
+        """Process tokens from queue in main thread"""
+        try:
+            while True:
+                msg_type, data = self.token_queue.get_nowait()
+                
+                if msg_type == 'start':
+                    # Remove thinking indicator
+                    self.chat_display.config(state=tk.NORMAL)
+                    self.chat_display.delete("end-3l", "end-1l")
+                    self.chat_display.insert(tk.END, "FitBot: ", "bot")
+                    self.chat_display.config(state=tk.DISABLED)
+                    
+                elif msg_type == 'token':
+                    self._append_text(data)
+                    
+                elif msg_type == 'done':
+                    self._append_text("\n\n")
+                    self.is_processing = False
+                    self.send_button.config(state=tk.NORMAL)
+                    self.input_field.config(state=tk.NORMAL)
+                    self.input_field.focus()
+                    
+        except queue.Empty:
+            pass
         
-        # Re-enable input
-        self.root.after(0, self._enable_input)
-    
-    def _remove_thinking(self):
-        """Remove thinking indicator"""
-        self.chat_display.config(state=tk.NORMAL)
-        # Delete last line (thinking indicator)
-        self.chat_display.delete("end-3l", "end-2l")
-        self.chat_display.config(state=tk.DISABLED)
-    
-    def _start_bot_response(self):
-        """Add bot label before streaming response"""
-        self.chat_display.config(state=tk.NORMAL)
-        self.chat_display.insert(tk.END, "FitBot: ", "bot")
-        self.chat_display.config(state=tk.DISABLED)
-    
-    def _enable_input(self):
-        """Re-enable input controls"""
-        self.send_button.config(state=tk.NORMAL)
-        self.input_field.config(state=tk.NORMAL)
-        self.input_field.focus()
+        # Schedule next check
+        self.root.after(10, self._process_token_queue)
     
     def start(self):
         """Start the GUI"""
@@ -501,7 +635,18 @@ What would you like to talk about?
 
 
 
+def main():
+    """Main entry point"""
+    config = Config()
+    logger = Logger(config.LOG_FILE)
+    logger.info("Starting FitBot")
+    chat = ChatInterface(config, logger)
+    chat.start()
 
+
+
+if __name__ == "__main__":
+    main()
 
 # OLD TERMINAL BASED CHAT INTERFACE
 
@@ -574,15 +719,3 @@ What would you like to talk about?
 
 # main entry point for this python app
 
-def main():
-    """Main entry point"""
-    print("Starting FitBot GUI...")
-    config = Config()
-    chat = ChatInterface(config)
-    chat.start()
-
-
-
-if __name__ == "__main__":
-    main()
-    

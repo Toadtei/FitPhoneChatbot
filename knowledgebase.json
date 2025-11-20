@@ -1,41 +1,197 @@
 [
-  {"q": "How can I reduce my screen time?", "a": "Start by checking your daily phone usage and set small limits. Try turning off notifications or setting 'no phone' times during meals or before bed."},
-  {"q": "Why do I feel anxious without my phone?", "a": "That's called FOMO — the fear of missing out. It's normal! Try taking small breaks from your phone and remind yourself that you're not missing anything essential."},
-  {"q": "What is FOMO?", "a": "FOMO stands for Fear of Missing Out — the worry that others are having fun or doing something exciting without you."},
-  {"q": "How does smartphone use affect my sleep?", "a": "Screens emit blue light that can trick your brain into staying awake. Try putting your phone away 30-60 minutes before sleeping."},
-  {"q": "Why can't I stop scrolling at night?", "a": "Endless scrolling gives your brain small dopamine hits. Setting a bedtime reminder or using night mode can help you stop earlier."},
-  {"q": "How much screen time is healthy?", "a": "It depends, but most experts recommend keeping recreational screen time under 2 hours a day outside of school or work."},
-  {"q": "Can my phone really make me stressed?", "a": "Yes — constant notifications and social comparison can increase stress. Try muting notifications and focusing on one task at a time."},
-  {"q": "How can I focus better without my phone?", "a": "Put your phone in another room or use 'focus mode'. Start with short breaks, like 25 minutes of focus and 5 minutes off — the Pomodoro method!"}, 
-  {"q": "What's a digital detox?", "a": "A short break from screens to recharge your mind. You can start with a few hours a day or one phone-free day each week."},
-  {"q": "Why do I check my phone so often?", "a": "Many apps are designed to grab your attention. Try to become aware of when and why you pick it up — awareness is the first step."},
-  {"q": "Can using my phone affect my mood?", "a": "Yes! Comparing yourself on social media or being constantly online can lower your mood. Try following positive accounts and limiting scrolling time."},
-  {"q": "What's the 20-20-20 rule?", "a": "Every 20 minutes, look at something 20 feet away for 20 seconds. It helps reduce eye strain from screens."},
-  {"q": "How can I use my phone more mindfully?", "a": "Before unlocking your phone, ask: 'Why am I using it right now?' This small pause helps you stay intentional."},
-  {"q": "Are there apps that help reduce screen time?", "a": "Yes! Apps like Digital Wellbeing or Screen Time let you track usage and set daily limits. FitPhone may also offer helpful tools!"},
-  {"q": "Why do I feel lonely even when I'm online?", "a": "Online connections aren't the same as real ones. Try spending more time face-to-face or outdoors — it often boosts mood and energy."},
-  {"q": "How can I sleep better without my phone?", "a": "Try charging your phone outside your bedroom and using an alarm clock instead. Create a calming bedtime routine without screens."},
-  {"q": "Is it bad to use my phone before bed?", "a": "Yes, blue light and notifications keep your brain alert. Try reading a book or listening to calming music instead."},
-  {"q": "Can I be addicted to my phone?", "a": "Phone addiction isn't an official diagnosis, but excessive use can feel addictive. Recognizing it is the first step toward balance."},
-  {"q": "What's the best way to start a digital detox?", "a": "Pick one area — like no phone during meals — and stick with it for a week. Small changes make big differences!"},
-  {"q": "Why do I get distracted so easily?", "a": "Notifications and multitasking overload your brain. Try turning off alerts and focusing on one thing at a time."},
-  {"q": "Can social media cause anxiety?", "a": "Yes — comparing yourself to others online can trigger anxiety. Unfollow accounts that make you feel bad and follow uplifting ones."},
-  {"q": "What's the connection between phones and mental health?", "a": "Excessive use can lead to stress, poor sleep, and anxiety. Balanced use supports better focus, rest, and relationships."},
-  {"q": "How can I stop comparing myself online?", "a": "Remember: social media is a highlight reel. Try focusing on your own goals and limit comparison time."},
-  {"q": "Is multitasking with my phone effective?", "a": "Not really — switching between apps and tasks lowers concentration. Single-tasking helps you get more done with less stress."},
-  {"q": "Can my phone affect my posture?", "a": "Yes! Looking down too much can cause 'text neck'. Keep your screen at eye level and stretch often."},
-  {"q": "What's a healthy morning routine with my phone?", "a": "Avoid checking messages first thing. Try stretching, journaling, or having breakfast before going online."},
-  {"q": "How can I handle FOMO better?", "a": "Remind yourself that everyone takes breaks. Replace FOMO with JOMO — the Joy of Missing Out!"},
-  {"q": "What is JOMO?", "a": "JOMO stands for Joy of Missing Out — enjoying the present moment without worrying about what others are doing."},
-  {"q": "Can phone use affect my relationships?", "a": "Yes. Being on your phone during conversations can make others feel ignored. Try putting it away during social time."},
-  {"q": "How can I stay motivated to use my phone less?", "a": "Set personal goals and reward yourself. Even small wins — like 30 minutes less screen time — count!"},
-  {"q": "Are there benefits to using my phone?", "a": "Of course! Phones can help you learn, connect, and stay organized — the key is using them consciously."},
-  {"q": "How can I track my phone habits?", "a": "Use your phone's built-in screen time tracker or a wellness app. Seeing your data helps you understand your habits."},
-  {"q": "What can I do when I feel bored without my phone?", "a": "Try creative or relaxing activities — go for a walk, listen to music, or talk to someone. Boredom can lead to great ideas!"},
-  {"q": "Why do I feel restless when I can't check my phone?", "a": "That's a withdrawal-like response — your brain misses the dopamine hits. It gets easier the more you practice staying offline."},
-  {"q": "What's the benefit of phone-free zones?", "a": "Phone-free areas (like the bedroom or dining table) help you relax, focus, and connect better with others."},
-  {"q": "Can I use my phone for mindfulness?", "a": "Yes! Use it for meditation apps, breathing exercises, or gratitude journaling — mindful tech use can be very positive."},
-  {"q": "What's one quick tip for balanced phone use?", "a": "Set intentional times to check messages instead of reacting instantly. Take control of when you connect."},
-  {"q": "Why is it hard to stop using social media?", "a": "Social platforms are designed to keep you engaged. Setting time limits or app timers helps you stay in control."},
-  {"q": "How can I remind myself to take breaks?", "a": "Set gentle reminders or use a 'Focus' mode. Even a few minutes away from your screen helps your mind reset."}
+  {
+    "q": "How can I reduce my screen time?",
+    "a": "Start by checking your daily phone usage and set small limits. Try turning off notifications or setting 'no phone' times during meals or before bed.",
+    "source": "https://www.healthline.com/health/how-to-reduce-screen-time"
+  },
+  {
+    "q": "Why do I feel anxious without my phone?",
+    "a": "That's called FOMO — the fear of missing out. It's normal! Try taking small breaks from your phone and remind yourself that you're not missing anything essential.",
+    "source": "https://fitphone.nl/themas/fear-of-missing-out/"
+  },
+  {
+    "q": "What is FOMO?",
+    "a": "FOMO stands for Fear of Missing Out — the worry that others are having fun or doing something exciting without you.",
+    "source": "https://fitphone.nl/themas/fear-of-missing-out/"
+  },
+  {
+    "q": "How does smartphone use affect my sleep?",
+    "a": "Screens emit blue light that can trick your brain into staying awake. Try putting your phone away 30-60 minutes before sleeping.",
+    "source": "https://fitphone.nl/themas/slaap-smartphone/"
+  },
+  {
+    "q": "Why can't I stop scrolling at night?",
+    "a": "Endless scrolling gives your brain small dopamine hits. Setting a bedtime reminder or using night mode can help you stop earlier.",
+    "source": "https://fitphone.nl/themas/slaap-smartphone/"
+  },
+  {
+    "q": "How much screen time is healthy?",
+    "a": "It depends, but most experts recommend keeping recreational screen time under 2 hours a day outside of school or work.",
+    "source": "https://www.reidhealth.org/blog/screen-time-for-adults"
+  },
+  {
+    "q": "Can my phone really make me stressed?",
+    "a": "Yes — constant notifications and social comparison can increase stress. Try muting notifications and focusing on one task at a time.",
+    "source": "https://fitphone.nl/themas/smartphone-technology/"
+  },
+  {
+    "q": "How can I focus better without my phone?",
+    "a": "Put your phone in another room or use 'focus mode'. Start with short breaks, like 25 minutes of focus and 5 minutes off — the Pomodoro method!",
+    "source": "https://fitphone.nl/themas/aandacht-smartphone/"
+  },
+  {
+    "q": "What's a digital detox?",
+    "a": "A short break from screens to recharge your mind. You can start with a few hours a day or one phone-free day each week.",
+    "source": "https://bmcmedicine.biomedcentral.com/articles/10.1186/s12916-025-03944-z"
+  },
+  {
+    "q": "Why do I check my phone so often?",
+    "a": "Many apps are designed to grab your attention. Try to become aware of when and why you pick it up — awareness is the first step.",
+    "source": "https://arxiv.org/abs/2106.02604"
+  },
+  {
+    "q": "Can using my phone affect my mood?",
+    "a": "Yes! Comparing yourself on social media or being constantly online can lower your mood. Try following positive accounts and limiting scrolling time.",
+    "source": "https://www.nature.com/articles/s41598-024-71947-6"
+  },
+  {
+    "q": "What's the 20-20-20 rule?",
+    "a": "Every 20 minutes, look at something 20 feet away for 20 seconds. It helps reduce eye strain from screens.",
+    "source": "https://www.healthline.com/health/eye-health/20-20-20-rule#overview"
+  },
+  {
+    "q": "How can I use my phone more mindfully?",
+    "a": "Before unlocking your phone, ask: 'Why am I using it right now?' This small pause helps you stay intentional.",
+    "source": "https://technosapiens.substack.com/p/a-mindful-approach-to-your-phone"
+  },
+  {
+    "q": "Are there apps that help reduce screen time?",
+    "a": "Yes! Apps like Digital Wellbeing or Screen Time let you track usage and set daily limits. FitPhone may also offer helpful tools!",
+    "source": "https://www.cnet.com/health/best-apps-to-help-manage-screen-time/"
+  },
+  {
+    "q": "Why do I feel lonely even when I'm online?",
+    "a": "Online connections aren't the same as real ones. Try spending more time face-to-face or outdoors — it often boosts mood and energy.",
+    "source": "https://www.cdc.gov/pcd/issues/2025/24_0537.htm"
+  },
+  {
+    "q": "How can I sleep better without my phone?",
+    "a": "Try charging your phone outside your bedroom and using an alarm clock instead. Create a calming bedtime routine without screens.",
+    "source": "https://fitphone.nl/themas/slaap-smartphone/"
+  },
+  {
+    "q": "Is it bad to use my phone before bed?",
+    "a": "Yes, blue light and notifications keep your brain alert. Try reading a book or listening to calming music instead.",
+    "source": "https://bmcpsychiatry.biomedcentral.com/articles/10.1186/s12888-025-06961-7"
+  },
+  {
+    "q": "Can I be addicted to my phone?",
+    "a": "Phone addiction isn't an official diagnosis, but excessive use can feel addictive. Recognizing it is the first step toward balance.",
+    "source": "https://www.helpguide.org/mental-health/addiction/smartphone-addiction"
+  },
+  {
+    "q": "What's the best way to start a digital detox?",
+    "a": "Pick one area — like no phone during meals — and stick with it for a week. Small changes make big differences!",
+    "source": "https://www.newportinstitute.com/resources/mental-health/digital-detox/"
+  },
+  {
+    "q": "Why do I get distracted so easily?",
+    "a": "Notifications and multitasking overload your brain. Try turning off alerts and focusing on one thing at a time.",
+    "source": "https://fitphone.nl/themas/aandacht-smartphone/"
+  },
+  {
+    "q": "Can social media cause anxiety?",
+    "a": "Yes — comparing yourself to others online can trigger anxiety. Unfollow accounts that make you feel bad and follow uplifting ones.",
+    "source": "https://fitphone.nl/themas/indentiteit/"
+  },
+  {
+    "q": "What's the connection between phones and mental health?",
+    "a": "Excessive use can lead to stress, poor sleep, and anxiety. Balanced use supports better focus, rest, and relationships.",
+    "source": "https://fitphone.nl/themas/aandacht-smartphone/"
+  },
+  {
+    "q": "How can I stop comparing myself online?",
+    "a": "Remember: social media is a highlight reel. Try focusing on your own goals and limit comparison time.",
+    "source": "https://fitphone.nl/themas/indentiteit/"
+  },
+  {
+    "q": "Is multitasking with my phone effective?",
+    "a": "Not really — switching between apps and tasks lowers concentration. Single-tasking helps you get more done with less stress.",
+    "source": "https://childmind.org/article/kids-shouldnt-use-phones-during-homework/"
+  },
+  {
+    "q": "Can my phone affect my posture?",
+    "a": "Yes! Looking down too much can cause 'text neck'. Keep your screen at eye level and stretch often.",
+    "source": "https://www.mayoclinichealthsystem.org/hometown-health/speaking-of-health/effect-of-technology-on-your-neck"
+  },
+  {
+    "q": "What's a healthy morning routine with my phone?",
+    "a": "Avoid checking messages first thing. Try stretching, journaling, or having breakfast before going online.",
+    "source": "https://camillestyles.com/wellness/morning-routine/phone-free-morning-routine/"
+  },
+  {
+    "q": "How can I handle FOMO better?",
+    "a": "Remind yourself that everyone takes breaks. Replace FOMO with JOMO — the Joy of Missing Out!",
+    "source": "https://fitphone.nl/themas/fear-of-missing-out/"
+  },
+  {
+    "q": "What is JOMO?",
+    "a": "JOMO stands for Joy of Missing Out — enjoying the present moment without worrying about what others are doing.",
+    "source": "https://health.clevelandclinic.org/jomo-the-joy-of-missing-out"
+  },
+  {
+    "q": "Can phone use affect my relationships?",
+    "a": "Yes. Being on your phone during conversations can make others feel ignored. Try putting it away during social time.",
+    "source": "https://greatergood.berkeley.edu/article/item/what_is_your_phone_doing_to_your_relationships"
+  },
+  {
+    "q": "How can I stay motivated to use my phone less?",
+    "a": "Set personal goals and reward yourself. Even small wins — like 30 minutes less screen time — count!",
+    "source": "https://www.scripps.org/news_items/6310-8-tips-to-reduce-screen-time-for-adults"
+  },
+  {
+    "q": "Are there benefits to using my phone?",
+    "a": "Of course! Phones can help you learn, connect, and stay organized — the key is using them consciously.",
+    "source": "https://cedartreecounseling.com/blog/pros-and-cons-of-smartphones/"
+  },
+  {
+    "q": "How can I track my phone habits?",
+    "a": "Use your phone's built-in screen time tracker or a wellness app. Seeing your data helps you understand your habits.",
+    "source": "https://www.twilio.com/en-us/blog/how-much-time-youre-spending-on-your-phone"
+  },
+  {
+    "q": "What can I do when I feel bored without my phone?",
+    "a": "Try creative or relaxing activities — go for a walk, listen to music, or talk to someone. Boredom can lead to great ideas!",
+    "source": "https://www.acon24.com/blogs/the-launch-pad/100-things-to-do-without-your-phone"
+  },
+  {
+    "q": "Why do I feel restless when I can't check my phone?",
+    "a": "That's a withdrawal-like response — your brain misses the dopamine hits. It gets easier the more you practice staying offline.",
+    "source": "https://www.healthline.com/health/anxiety/nomophobia"
+  },
+  {
+    "q": "What's the benefit of phone-free zones?",
+    "a": "Phone-free areas (like the bedroom or dining table) help you relax, focus, and connect better with others.",
+    "source": "https://blog.firststophealth.com/blog/creating-a-phone-free-zone"
+  },
+  {
+    "q": "Can I use my phone for mindfulness?",
+    "a": "Yes! Use it for meditation apps, breathing exercises, or gratitude journaling — mindful tech use can be very positive.",
+    "source": "https://www.headspace.com/about-us?origin=navigation"
+  },
+  {
+    "q": "What's one quick tip for balanced phone use?",
+    "a": "Set intentional times to check messages instead of reacting instantly. Take control of when you connect.",
+    "source": "https://www.asurion.com/connect/tech-tips/7-essential-tips-for-achieving-tech-life-balance/"
+  },
+  {
+    "q": "Why is it hard to stop using social media?",
+    "a": "Social platforms are designed to keep you engaged. Setting time limits or app timers helps you stay in control.",
+    "source": "https://www.psychologytoday.com/us/blog/play-your-way-sane/202502/the-psychology-of-quitting-social-media"
+  },
+  {
+    "q": "How can I remind myself to take breaks?",
+    "a": "Set gentle reminders or use a 'Focus' mode. Even a few minutes away from your screen helps your mind reset.",
+    "source": "https://www.umsystem.edu/totalrewards/wellness/activity_and_break_apps"
+  }
 ]
