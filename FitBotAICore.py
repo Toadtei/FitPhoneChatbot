@@ -345,7 +345,7 @@ IMPORTANT:
 
 # COMPLETELY NEW: GUI Version of ChatInterface
 class ChatInterface:
-    """Tkinter GUI chat interface"""
+    """Tkinter GUI chat interface - Phase 2 (Bubbles)"""
     
     def __init__(self, config: Config, logger: Logger):
         self.config = config
@@ -354,25 +354,23 @@ class ChatInterface:
         self.token_queue = queue.Queue()
         self.is_processing = False
         
+        
         # Create main window
         self.root = tk.Tk()
-        self.root.title("FitBot") # Shortened title looks cleaner
+        self.root.title("FitBot")
         self.root.state('zoomed') 
         self.root.configure(bg="#1e1e1e")
         
         # --- WINDOWS DARK TITLE BAR HACK ---
-        # This forces the windows title bar to be black (Windows 10/11)
         try:
             import ctypes
-            # DWMWA_USE_IMMERSIVE_DARK_MODE = 20
             ctypes.windll.dwmapi.DwmSetWindowAttribute(
                 int(self.root.frame(), 16), 20, ctypes.byref(ctypes.c_int(2)), 4
             )
         except Exception:
-            pass # Fails gracefully on non-Windows systems
+            pass
 
-        # Try to change icon to a blank one (removes feather if possible)
-        # Without an external .ico file, this is the standard Tkinter workaround
+        # Icon workaround
         try:
             pixel = tk.PhotoImage(width=1, height=1)
             self.root.iconphoto(False, pixel)
@@ -381,251 +379,263 @@ class ChatInterface:
 
         # --- COLORS ---
         self.bg_color = "#1e1e1e"
-        self.chat_bg = "#252525" 
+        self.chat_bg = "#1e1e1e" # Match root for seamless look
         self.header_bg = "#CC5500" 
-        self.text_color = "#e0e0e0"
         self.input_bg = "#333333"
+        self.text_color = "#ffffff"
+        
+        # Bubble Colors
+        self.user_bubble_bg = "#0078D7" # Blue
+        self.bot_bubble_bg = "#333333"  # Dark Gray
 
-        # --- STYLE CONFIGURATION ---
+        # Streaming tracker
+        self.current_msg_label = None
+
+        # --- STYLE ---
         style = ttk.Style()
         style.theme_use('clam') 
-        
-        # Refined scrollbar style to remove white artifacts
         style.configure("Dark.Vertical.TScrollbar", 
-                        gripcount=0,
-                        background="#3d3d3d", 
-                        darkcolor="#3d3d3d", 
-                        lightcolor="#3d3d3d",
-                        troughcolor=self.chat_bg, # MATCHES CHAT BG
-                        bordercolor=self.chat_bg, 
+                        gripcount=0, background="#3d3d3d", 
+                        darkcolor="#3d3d3d", lightcolor="#3d3d3d",
+                        troughcolor=self.chat_bg, bordercolor=self.chat_bg, 
                         arrowcolor="#e0e0e0")
 
         self._create_widgets()
         self._show_welcome_message()
-        
-        # Start token processing loop
         self._process_token_queue()
+
+    def _get_responsive_settings(self):
+        """Calculate font size and bubble width based on window width"""
+        # Get current window width
+        win_width = self.root.winfo_width()
+        
+        # Default (startup) fallback
+        if win_width == 1: 
+            win_width = 1200
+
+        if win_width > 1600: # Large 4k/Ultrawide screens
+            font_size = 14
+            wrap_len = int(win_width * 0.60) # Use 60% of screen width
+        elif win_width > 1200: # Standard Desktop
+            font_size = 12
+            wrap_len = int(win_width * 0.55)
+        else: # Laptop / Small Window
+            font_size = 11
+            wrap_len = 500
+            
+        return font_size, wrap_len
     
     def _create_widgets(self):
-        """Create GUI elements - Phase 1 Fixed"""
+        """Create GUI elements - Bubbles & Floating Input"""
         
-        # --- 1. INPUT AREA (Pack First to ensure visibility!) ---
+        # --- 1. INPUT AREA (Packed First for Visibility) ---
+        # Increased padx/pady to make it look "Floating"
         input_container = tk.Frame(self.root, bg=self.bg_color)
-        # pack with side=BOTTOM first so it reserves space
-        input_container.pack(fill=tk.X, side=tk.BOTTOM, padx=50, pady=(0, 30))
+        input_container.pack(fill=tk.X, side=tk.BOTTOM, padx=50, pady=40)
         
-        # Input Inner Frame (The dark bar background)
         input_inner_frame = tk.Frame(input_container, bg=self.input_bg)
         input_inner_frame.pack(fill=tk.X)
         
-        # Text Input
         self.input_field = tk.Text(
-            input_inner_frame,
-            height=3,
-            font=("Segoe UI", 11),
-            bg=self.input_bg,
-            fg="white",
-            relief=tk.FLAT,
-            wrap=tk.WORD,
-            insertbackground="white",
-            padx=10,
-            pady=10
+            input_inner_frame, height=3, font=("Segoe UI", 11),
+            bg=self.input_bg, fg="white", relief=tk.FLAT,
+            wrap=tk.WORD, insertbackground="white", padx=15, pady=15
         )
         self.input_field.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.input_field.bind("<Return>", self._on_enter)
         self.input_field.bind("<Shift-Return>", lambda e: None)
 
-        # Send Button (Modified: No Stretch, Added Padding)
         self.send_button = tk.Button(
-            input_inner_frame,
-            text="SEND",
-            command=self._send_message,
-            bg=self.header_bg,
-            fg="white",
-            font=("Segoe UI", 10, "bold"),
-            relief=tk.FLAT,
-            cursor="hand2",
-            width=10,
-            activebackground="#a04000",
-            activeforeground="white"
+            input_inner_frame, text="SEND", command=self._send_message,
+            bg=self.header_bg, fg="white", font=("Segoe UI", 10, "bold"),
+            relief=tk.FLAT, cursor="hand2", width=10,
+            activebackground="#a04000", activeforeground="white"
         )
-        # Removed fill=tk.Y, added pady to create the "gap" inside the bar
-        self.send_button.pack(side=tk.RIGHT, padx=10, pady=2)
-
+        self.send_button.pack(side=tk.RIGHT, padx=10, pady=10, ipady=8)
 
         # --- 2. HEADER (Top) ---
         header = tk.Frame(self.root, bg=self.header_bg, height=70)
         header.pack(fill=tk.X, side=tk.TOP)
         header.pack_propagate(False)
         
-        title = tk.Label(header, text="🤖 FitBot", 
-                        font=("Segoe UI", 22, "bold"),
+        title = tk.Label(header, text="🤖 FitBot", font=("Segoe UI", 22, "bold"),
                         bg=self.header_bg, fg="white")
         title.pack(pady=15)
 
-
-        # --- 3. CHAT AREA (Middle - Fills remaining space) ---
-        # IMPORTANT: bg must match chat_bg so scrollbar trough isn't white
-        chat_container = tk.Frame(self.root, bg=self.chat_bg) 
-        chat_container.pack(fill=tk.BOTH, expand=True, padx=50, pady=(20, 20))
+        # --- 3. CHAT AREA (Canvas for Bubbles) ---
+        chat_container = tk.Frame(self.root, bg=self.chat_bg)
+        chat_container.pack(fill=tk.BOTH, expand=True, padx=30, pady=(20, 0))
         
-        # Custom Scrollbar
         self.scrollbar = ttk.Scrollbar(chat_container, orient="vertical", style="Dark.Vertical.TScrollbar")
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Main Chat Text Display
-        self.chat_display = tk.Text(
-            chat_container,
-            wrap=tk.WORD,
-            font=("Segoe UI", 11),
-            bg=self.chat_bg,
-            fg=self.text_color,
-            relief=tk.FLAT,
-            state=tk.DISABLED,
-            padx=20, 
-            pady=20,
-            spacing1=5, 
-            spacing3=5,
-            yscrollcommand=self.scrollbar.set,
-            bd=0, # Remove border
-            highlightthickness=0 # Remove selection highlight border
+        # Canvas replaces Text widget
+        self.chat_canvas = tk.Canvas(
+            chat_container, bg=self.chat_bg, bd=0, highlightthickness=0,
+            yscrollcommand=self.scrollbar.set
         )
-        self.chat_display.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+        self.chat_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.scrollbar.config(command=self.chat_canvas.yview)
         
-        # Link scrollbar
-        self.scrollbar.config(command=self.chat_display.yview)
+        # Frame inside Canvas to hold messages
+        self.msg_frame = tk.Frame(self.chat_canvas, bg=self.chat_bg)
+        self.canvas_window = self.chat_canvas.create_window((0, 0), window=self.msg_frame, anchor="nw")
         
-        # Tags
-        self.chat_display.tag_config("user", foreground="#7dd3fc", font=("Segoe UI", 11, "bold"))
-        self.chat_display.tag_config("bot", foreground="#fb923c", font=("Segoe UI", 11, "bold"))
-        self.chat_display.tag_config("thinking", foreground="#888888", font=("Segoe UI", 10, "italic"))
+        # Bindings for scrolling
+        self.msg_frame.bind("<Configure>", self._on_frame_configure)
+        self.chat_canvas.bind("<Configure>", self._on_canvas_configure)
+        self.chat_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
 
         self.input_field.focus()
-    
+
+    # --- SCROLLING HELPERS ---
+    def _on_frame_configure(self, event=None):
+        """Reset scroll region"""
+        self.chat_canvas.configure(scrollregion=self.chat_canvas.bbox("all"))
+
+    def _on_canvas_configure(self, event):
+        """Resize inner frame to match canvas width"""
+        width = event.width
+        self.chat_canvas.itemconfig(self.canvas_window, width=width)
+
+    def _on_mousewheel(self, event):
+        """Mousewheel scrolling"""
+        self.chat_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
+    def _scroll_to_bottom(self):
+        """Auto-scroll to bottom"""
+        self.chat_canvas.update_idletasks()
+        self.chat_canvas.yview_moveto(1.0)
+
+    # --- MESSAGE BUBBLE LOGIC ---
     def _show_welcome_message(self):
-        """Display welcome message"""
         welcome = """Welcome to FitBot! 🎉
 
 I'm here to help you develop healthier smartphone habits!
 
 Topics I can help with:
-📱 Screen time 
-😰 FOMO
-🔕 Notifications
-😴 Sleep
-🧘 Digital detox
-🎯 Focus
-📊 Social media
+📱 Screen time • 😰 FOMO • 🔕 Notifications
+😴 Sleep • 🧘 Digital detox • 🎯 Focus
 
 What would you like to talk about?"""
         self._append_message("bot", welcome)
-    
+
     def _append_message(self, role: str, message: str, tag=None):
-        """Append message to chat display"""
-        self.chat_display.config(state=tk.NORMAL)
+        """Create a message bubble with responsive sizing"""
         
+        # 1. Get Dynamic Settings based on screen size
+        font_size, wrap_len = self._get_responsive_settings()
+        bubble_font = ("Segoe UI", font_size)
+
+        # Determine alignment and color
         if role == "user":
-            self.chat_display.insert(tk.END, "You: ", "user")
-        elif role == "bot":
-            self.chat_display.insert(tk.END, "FitBot: ", "bot")
-        elif role == "thinking":
-            self.chat_display.insert(tk.END, "FitBot: ", "thinking")
-        
-        if tag:
-            self.chat_display.insert(tk.END, message + "\n\n", tag)
+            bg_color = self.user_bubble_bg
+            text_color = "white"
+            container_anchor = "e" 
         else:
-            self.chat_display.insert(tk.END, message + "\n\n")
-        
-        self.chat_display.config(state=tk.DISABLED)
-        self.chat_display.see(tk.END)
-    
-    def _append_text(self, text: str):
-        """Append text without label (for streaming)"""
-        self.chat_display.config(state=tk.NORMAL)
-        self.chat_display.insert(tk.END, text)
-        self.chat_display.config(state=tk.DISABLED)
-        self.chat_display.see(tk.END)
-    
-    def _on_enter(self, event):
-        """Handle Enter key press"""
-        if not event.state & 0x1:  # Check if Shift is not pressed
-            self._send_message()
-            return "break"  # Prevent newline
-    
-    def _send_message(self):
-        """Send user message"""
-        if self.is_processing:
-            return
+            bg_color = self.bot_bubble_bg
+            text_color = "white"
+            container_anchor = "w" 
             
-        user_input = self.input_field.get("1.0", tk.END).strip()
+        if role == "thinking":
+            text_color = "#aaaaaa"
+
+        # 2. Row Container
+        row_frame = tk.Frame(self.msg_frame, bg=self.chat_bg)
+        row_frame.pack(fill=tk.X, padx=20, pady=10) # Increased padding slightly
         
-        if not user_input:
-            return
+        # 3. Wrapper (Anchors the bubble left or right)
+        bubble_wrapper = tk.Frame(row_frame, bg=self.chat_bg)
+        bubble_wrapper.pack(anchor=container_anchor)
         
-        # Clear input field
-        self.input_field.delete("1.0", tk.END)
+        # 4. The Bubble (Label)
+        label = tk.Label(
+            bubble_wrapper,
+            text=message,
+            font=bubble_font, # <--- Using dynamic font
+            bg=bg_color,
+            fg=text_color,
+            padx=20, # More internal breathing room
+            pady=12, 
+            justify=tk.LEFT,
+            wraplength=wrap_len # <--- Using dynamic width
+        )
+        label.pack()
         
-        # Display user message
-        self._append_message("user", user_input)
-        
-        # Disable input while processing
-        self.is_processing = True
-        self.send_button.config(state=tk.DISABLED)
-        self.input_field.config(state=tk.DISABLED)
-        
-        # Show thinking indicator
-        self._append_message("thinking", "🤔 Thinking...")
-        
-        # Process in background thread
-        threading.Thread(target=self._process_response, args=(user_input,), daemon=True).start()
-    
-    def _process_response(self, user_input: str):
-        """Process message in background thread"""
-        
-        # Callback to queue tokens
-        def stream_callback(token):
-            self.token_queue.put(('token', token))
-        
-        # Signal to remove thinking and start response
-        self.token_queue.put(('start', None))
-        
-        # Generate response
-        self.conversation.process_message(user_input, stream_callback)
-        
-        # Signal completion
-        self.token_queue.put(('done', None))
-    
+        if role == "bot" or role == "thinking":
+            self.current_msg_label = label
+            
+        self._scroll_to_bottom()
+
+    def _append_text(self, text: str):
+        """Update current bubble text (Streaming)"""
+        if self.current_msg_label:
+            current_text = self.current_msg_label.cget("text")
+            self.current_msg_label.config(text=current_text + text)
+            self._scroll_to_bottom()
+
     def _process_token_queue(self):
-        """Process tokens from queue in main thread"""
+        """Handle streaming tokens"""
         try:
             while True:
                 msg_type, data = self.token_queue.get_nowait()
                 
                 if msg_type == 'start':
-                    # Remove thinking indicator
-                    self.chat_display.config(state=tk.NORMAL)
-                    self.chat_display.delete("end-3l", "end-1l")
-                    self.chat_display.insert(tk.END, "FitBot: ", "bot")
-                    self.chat_display.config(state=tk.DISABLED)
+                    # Clear the "Thinking..." text from the current bubble
+                    # so we can fill it with the actual response
+                    if self.current_msg_label:
+                        self.current_msg_label.config(text="", fg="white")
                     
                 elif msg_type == 'token':
                     self._append_text(data)
                     
                 elif msg_type == 'done':
-                    self._append_text("\n\n")
                     self.is_processing = False
                     self.send_button.config(state=tk.NORMAL)
                     self.input_field.config(state=tk.NORMAL)
                     self.input_field.focus()
+                    self._scroll_to_bottom()
                     
         except queue.Empty:
             pass
         
-        # Schedule next check
         self.root.after(10, self._process_token_queue)
-    
+
+    def _on_enter(self, event):
+        if not event.state & 0x1:
+            self._send_message()
+            return "break"
+
+    def _send_message(self):
+        if self.is_processing:
+            return
+        user_input = self.input_field.get("1.0", tk.END).strip()
+        if not user_input:
+            return
+        
+        self.input_field.delete("1.0", tk.END)
+        
+        # Add User Bubble
+        self._append_message("user", user_input)
+        
+        self.is_processing = True
+        self.send_button.config(state=tk.DISABLED)
+        self.input_field.config(state=tk.DISABLED)
+        
+        # Add Bot "Thinking" Bubble
+        self._append_message("thinking", "🤔 Thinking...")
+        
+        threading.Thread(target=self._process_response, args=(user_input,), daemon=True).start()
+
+    def _process_response(self, user_input: str):
+        def stream_callback(token):
+            self.token_queue.put(('token', token))
+        
+        self.token_queue.put(('start', None))
+        self.conversation.process_message(user_input, stream_callback)
+        self.token_queue.put(('done', None))
+
     def start(self):
-        """Start the GUI"""
         self.root.mainloop()
 
 
