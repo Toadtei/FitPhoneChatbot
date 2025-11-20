@@ -24,6 +24,9 @@ import queue
 import tkinter as tk
 from tkinter import scrolledtext, ttk
 
+from sentence_transformers import SentenceTransformer, util
+import numpy as np
+
 
 class Config:
     """Configuration settings"""
@@ -34,15 +37,31 @@ class Config:
     MAX_CONVERSATION_HISTORY = 10 #maybe for future, how many messages are we storing in genearl, can be later use for things like summarize the conversation
 
 class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, instead of documents and vecotr database, we have Q&A pairs in json. 
-    # TODO: move from jaccard similarity matching to sentecne embedings and vectorizing to match better based on meaning of the input.
-    """Matches user queries with knowledge base""" 
-    
+    """
+    Matches user queries with KB using sentence embeddings
+    (semantic similarity instead of keyword overlap).
+    """
     
     def __init__(self, kb_path: str):
         self.kb = self._load_kb(kb_path)
-        self.stopwords = {"a", "an", "the", "is", "are", "was", "were",
-                         "in", "on", "at", "to", "for", "of", "and", "or"}
-    
+        
+        print("Loading sentence embedding model (all-MiniLM-L6-v2)...")
+        self.model = SentenceTransformer("all-MiniLM-L6-v2")
+        
+        # Prepare text for embedding
+        kb_texts = []
+        for entry in self.kb:
+            kb_texts.append(entry["q"] + " " + entry["a"])
+        
+        print(f"Encoding {len(kb_texts)} KB entries into embeddings...")
+        # Convert all KB texts into embedding vectors
+        # normalize_embeddings=True makes cosine similarity easier and more stable
+        self.kb_embeddings = self.model.encode(
+            kb_texts,
+            normalize_embeddings=True
+        )
+        print("KB embeddings ready")
+
     def _load_kb(self, path: str) -> List[Dict]:
         """Load knowledge base from JSON"""
         
@@ -63,38 +82,46 @@ class KnowledgeBaseMatcher: # basically very simple version of RAG retrievel, in
         return kb
     
     def get_best_matches(self, user_input: str, top_k: int = 3) -> List[Dict]:
-        """Get top K most relevant KB entries"""
-        
-        user_tokens = self._tokenize(user_input.lower())
-        
-        scores = []
-        for entry in self.kb:
-            question_tokens = self._tokenize(entry['q'].lower())
-            score = self._jaccard_similarity(user_tokens, question_tokens)
-            
-            scores.append({
-                "question": entry['q'],
-                "answer": entry['a'],
-                "source": entry.get('source', ''),
-                "category": entry.get('category', 'general'),
+        """
+        Find the KB entries with closest meaning to the user's message,
+        using cosine similarity between embeddings.
+        """
+        user_input = user_input.strip()
+        if not user_input:
+            return []
+
+        # Convert the user message into an embedding vector
+        query_embedding = self.model.encode(
+            user_input,
+            normalize_embeddings=True
+        )
+
+        # Compare user embedding with all KB embeddings
+        # util.cos_sim returns a similarity score for each KB entry
+        sims = util.cos_sim(query_embedding, self.kb_embeddings)[0].cpu().tolist()
+
+        # Sort KB entries by highest similarity score
+        ranked_indices = sorted(
+            range(len(sims)),
+            key=lambda i: sims[i],
+            reverse=True
+        )[:top_k]
+
+        # Build the final results
+        results: List[Dict] = []
+        for idx in ranked_indices:
+            entry = self.kb[idx]
+            score = float(sims[idx])
+
+            results.append({
+                "question": entry["q"],
+                "answer": entry["a"],
+                "source": entry.get("source", ""),
+                "category": entry.get("category", "general"),
                 "score": score
             })
-        
-        scores.sort(key=lambda x: x['score'], reverse=True)
-        return scores[:top_k]
-    
-    def _tokenize(self, text: str) -> Set[str]:
-        """Extract meaningful words"""
-        words = re.findall(r'\b\w+\b', text)
-        return {w for w in words if len(w) >= 3 and w not in self.stopwords}
-    
-    def _jaccard_similarity(self, set1: Set[str], set2: Set[str]) -> float:
-        """Calculate similarity score"""
-        if not set1 or not set2:
-            return 0.0
-        intersection = len(set1 & set2)
-        union = len(set1 | set2)
-        return intersection / union if union > 0 else 0.0
+
+        return results
 
 
 class OllamaClient:
