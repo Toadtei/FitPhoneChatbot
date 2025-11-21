@@ -429,6 +429,34 @@ class ChatInterface:
             
         return font_size, wrap_len
     
+    def _clear_chat_display(self):
+        """Destroys all message bubbles in the chat display."""
+        for widget in self.msg_frame.winfo_children():
+            widget.destroy()
+
+    def _start_new_chat(self):
+        """Resets conversation history and clears the chat interface."""
+        # 1. Reset ConversationManager's history
+        self.conversation.messages = []
+        self.logger.info("Chat history cleared. Starting new conversation.")
+        
+        # 2. Clear the UI
+        self._clear_chat_display()
+        
+        # 3. Display the welcome message again
+        self._show_welcome_message()
+        
+        # 4. Clear the input field and reset focus
+        self.input_field.delete("1.0", tk.END)
+        self.input_field.focus()
+        
+        # 5. Ensure the send button is enabled
+        self.is_processing = False
+        self.send_button.config(state=tk.NORMAL)
+        self.input_field.config(state=tk.NORMAL)
+        
+        self._scroll_to_bottom()
+    
     def _create_widgets(self):
         """Create GUI elements - Bubbles & Floating Input"""
         
@@ -463,8 +491,19 @@ class ChatInterface:
         header.pack_propagate(False)
         
         title = tk.Label(header, text="🤖 FitBot", font=("Segoe UI", 22, "bold"),
-                        bg=self.header_bg, fg="white")
-        title.pack(pady=15)
+                         bg=self.header_bg, fg="white")
+        # Change title pack to LEFT and add padding
+        title.pack(pady=15, side=tk.LEFT, padx=30)
+        
+        # --- NEW CHAT BUTTON (ADD THIS) ---
+        new_chat_button = tk.Button(
+            header, text="New Chat", command=self._start_new_chat,
+            bg=self.header_bg, fg="white", font=("Segoe UI", 10, "bold"),
+            relief=tk.FLAT, cursor="hand2", 
+            activebackground="#a04000", activeforeground="white",
+            bd=0 # Remove default button border
+        )
+        new_chat_button.pack(side=tk.RIGHT, padx=30)
 
         # --- 3. CHAT AREA (Canvas for Bubbles) ---
         chat_container = tk.Frame(self.root, bg=self.chat_bg)
@@ -515,7 +554,7 @@ class ChatInterface:
     def _show_welcome_message(self):
         welcome = """Welcome to FitBot! 🎉
 
-# I'm here to help you develop healthier smartphone habits!
+I'm here to help you develop healthier smartphone habits!
 
 Topics I can help with:
 📱 Screen time • 😰 FOMO • 🔕 Notifications
