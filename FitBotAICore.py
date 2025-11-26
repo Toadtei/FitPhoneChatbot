@@ -715,22 +715,26 @@ What would you like to talk about?"""
         self.input_field.config(state=tk.DISABLED)
         
         # Add Bot "Thinking" Bubble
-        self._append_message("thinking", "🤔 Thinking...")
+        self._append_message("thinking", "Thinking...")
         
         threading.Thread(target=self._process_response, args=(user_input,), daemon=True).start()
 
     def _process_response(self, user_input: str):
-        def stream_callback(token):
-            self.token_queue.put(('token', token))
         
-        self.token_queue.put(('start', None))
+        state = {'is_first_token': True}
+        def stream_callback(token):
+            
+            if state['is_first_token']:
+                self.token_queue.put(('start', None))
+                state['is_first_token'] = False
+        
+            self.token_queue.put(('token', token))
+
         self.conversation.process_message(user_input, stream_callback)
         self.token_queue.put(('done', None))
 
     def start(self):
         self.root.mainloop()
-
-
 
 
 def main():
