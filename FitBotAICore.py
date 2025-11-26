@@ -554,6 +554,37 @@ class ChatInterface:
         self.chat_canvas.update_idletasks()
         self.chat_canvas.yview_moveto(1.0)
 
+    def _animate_dots(self, frame=0):
+        """Cycles through ., .., ... to show activity"""
+        if not self.is_processing:
+            return
+
+        # Define the states (you can make this fancy if you want)
+        states = [
+            "Thinking",
+            "Thinking.",
+            "Thinking..",
+            "Thinking..."
+        ]
+        
+        # Update the label text
+        current_text = states[frame % len(states)]
+        
+        if self.current_msg_label:
+            self.current_msg_label.config(text=current_text)
+            
+        # Schedule the next frame in 500ms (0.5 seconds)
+        self.animation_id = self.root.after(500, self._animate_dots, frame + 1)
+
+    def _stop_animation(self):
+        """Cancels the running animation safely"""
+        if hasattr(self, 'animation_id') and self.animation_id:
+            try:
+                self.root.after_cancel(self.animation_id)
+                self.animation_id = None
+            except Exception:
+                pass
+
     # --- MESSAGE BUBBLE LOGIC ---
     def _show_welcome_message(self):
         welcome = """Welcome to FitBot! 🎉
@@ -629,6 +660,7 @@ What would you like to talk about?"""
                 msg_type, data = self.token_queue.get_nowait()
                 
                 if msg_type == 'start':
+                    self._stop_animation()
                     # Clear the "Thinking..." text from the current bubble
                     # so we can fill it with the actual response
                     if self.current_msg_label:
@@ -716,6 +748,8 @@ What would you like to talk about?"""
         
         # Add Bot "Thinking" Bubble
         self._append_message("thinking", "Thinking...")
+
+        self._animate_dots()
         
         threading.Thread(target=self._process_response, args=(user_input,), daemon=True).start()
 
