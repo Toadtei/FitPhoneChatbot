@@ -193,5 +193,65 @@
     "q": "How can I remind myself to take breaks?",
     "a": "Set gentle reminders or use a 'Focus' mode. Even a few minutes away from your screen helps your mind reset.",
     "source": "https://www.umsystem.edu/totalrewards/wellness/activity_and_break_apps"
+  },
+  {
+    "q": "What is Fitphone?",
+    "a": "Fontys Fitphone is a Fontys project that focuses on raising awareness and making different choices regarding smartphone use. In this project, we are developing a digital intervention.",
+    "source": "https://fitphone.nl/"
+  },
+  {
+    "q": "How does Fitphone work?",
+    "a": "Fitphone is a tool that gives you insight into your smartphone behavior.",
+    "source": "https://fitphone.nl/"
+  },
+  {
+    "q": "Who is FitPhone for?",
+    "a": "FitPhone is primarily aimed at young people (around 18-25) and students; the project develops interventions and tools to promote healthier smartphone use in educational and youth care settings.",
+    "source": "https://fitphone.nl/about/"
+  },
+  {
+    "q": "What is the QuickScan?",
+    "a": "The QuickScan is a short assessment (implemented via an app) that helps you map who you are with your smartphone and what your smartphone behaviour looks like so you can make better, conscious choices.",
+    "source": "https://fitphone.nl/"
+  },
+  {
+    "q": "What are the main steps of FitPhone?",
+    "a": "FitPhone guides users through four steps: 1) self-research (measuring your behaviour), 2) deciding what you want to focus your attention on (values/goals), 3) choosing challenges to change habits, and 4) staying 'Smartfit' to keep the gains.",
+    "source": "https://fitphone.nl/"
+  },
+  {
+    "q": "What kinds of challenges does FitPhone offer?",
+    "a": "FitPhone provides several practical challenges such as adjusting settings, putting the phone away, taking a smartphone 'vacation', and doing challenges together with others to reduce smartphone distraction.",
+    "source": "https://fitphone.nl/challenges/"
+  },
+  {
+    "q": "Is FitPhone a research project?",
+    "a": "Yes — FitPhone is developed with a design-research approach in collaboration with Fontys Hogeschool, Tranzo Tilburg University and other partners; it is tested in 'proeftuinen' where students and professionals co-design and evaluate interventions.",
+    "source": "https://fitphone.nl/about/"
+  },
+  {
+    "q": "Who runs FitPhone and how can I contact them?",
+    "a": "FitPhone is a Fontys project (with multiple partners). The project leader is Herm Kisjes; contact email listed on the site is h.kisjes@fontys.nl.",
+    "source": "https://fitphone.nl/contact/"
+  },
+  {
+    "q": "Will my data be handled securely (GDPR/AVG)?",
+    "a": "One of the project goals is to develop a digital intervention that is 'AVG-proof' (GDPR-compliant) so it can be used safely in research and practice.",
+    "source": "https://fitphone.nl/about/"
+  },
+  {
+    "q": "How does FitPhone help students specifically?",
+    "a": "FitPhone aims to increase students' awareness of smartphone use, help them make better choices about attention and study habits, and can also be used to teach future professionals how to support clients in changing lifestyle behaviours.",
+    "source": "https://fitphone.nl/about/"
+  },
+  {
+    "q": "Are there themes or topics FitPhone covers?",
+    "a": "Yes — the site covers themes such as attention & smartphone use, smartphone effects on sleep, identity, social anxiety & connectedness, fear of missing out (FOMO), and study performance.",
+    "source": "https://fitphone.nl/"
+  },
+  {
+    "q": "How do I get started with FitPhone on the site?",
+    "a": "You can start by doing the self-research/QuickScan on the site (or via the app being developed), use the provided help-forms to set values and goals, then select and follow challenges that fit your goals.",
+    "source": "https://fitphone.nl/"
   }
 ]
