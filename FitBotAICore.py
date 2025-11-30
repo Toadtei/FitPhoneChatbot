@@ -17,7 +17,7 @@ import json
 import re
 import os
 from datetime import datetime
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Optional
 import threading
 import queue
 
@@ -237,6 +237,151 @@ class OllamaClient:
                 stream_callback(error_msg)
             return error_msg
 
+class SafetyFilter:
+    """Simple rule-based safety & boundary filter."""
+
+    def __init__(self, logger: Logger):
+        self.logger = logger
+
+        # simple keyword lists, can be expanded
+        self.emergency_keywords = [
+            "chest pain", "heart attack", "can't breathe", "cannot breathe",
+            "overdose", "suicidal", "kill myself", "end my life",
+            "suicide", "want to die", "hurt myself", "self harm", "self-harm"
+        ]
+        self.diagnosis_keywords = [
+            "do i have", "am i", "diagnose", "diagnosis",
+            "adhd", "depression", "autism", "covid", "covid-19", "flu", "anxiety disorder"
+        ]
+        # sensitive personal data patterns
+        self.personal_data_keywords = [
+            "my full name is", "my name is",
+            "my address is", "home address", "postal address",
+            "bsn", "social security number", "ssn",
+            "passport number", "id number", "id card number",
+            "phone number", "whatsapp number", "email address"
+        ]
+        # legal / financial advice patterns
+        self.legal_keywords = [
+            "legal advice", "should i sue", "file a lawsuit",
+            "press charges", "report my boss", "go to the police",
+            "is it illegal", "can i get in trouble", "lawyer", "attorney"
+        ]
+        self.financial_keywords = [
+            "financial advice", "should i invest", "should i buy this stock",
+            "should i buy crypto", "investment advice",
+            "health plan", "insurance plan", "mortgage", "loan"
+        ]
+
+    def _contains_any(self, text: str, keywords) -> bool:
+        text_l = text.lower()
+        return any(kw in text_l for kw in keywords)
+
+    def _contains_personal_data(self, text: str) -> bool:
+        """Detect obvious personal data patterns like email, phone, address phrases."""
+        text_l = text.lower()
+
+        if any(kw in text_l for kw in self.personal_data_keywords):
+            return True
+
+        # email pattern
+        if re.search(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', text):
+            return True
+
+        # phone-like pattern: long digit sequences (with optional spaces or dashes)
+        if re.search(r'(\+?\d[\d \-]{8,}\d)', text):
+            return True
+
+        return False
+
+    def handle_user_input(self, user_input: str) -> Optional[str]:
+        """
+        If the input falls into a blocked/redirected category, return a canned response.
+        If it's fine, return None and the normal flow continues.
+        """
+
+        # EMERGENCY / CRISIS
+        if self._contains_any(user_input, self.emergency_keywords):
+            self.logger.info("SafetyFilter: Emergency-like input detected.")
+            return (
+                "That sounds really serious and I’m not able to help with emergencies.\n\n"
+                "Please contact your local emergency number or a medical professional immediately, "
+                "or reach out to someone you trust. You don’t have to deal with this alone. ❤️"
+            )
+
+        # MEDICAL DIAGNOSIS
+        if self._contains_any(user_input, self.diagnosis_keywords):
+            self.logger.info("SafetyFilter: Possible medical diagnosis request detected.")
+            return (
+                "I’m not a medical professional, so I can’t say whether you have a condition or not.\n\n"
+                "What I *can* do is help you look at how your phone use affects your stress, mood, or sleep. "
+                "For medical concerns, it’s best to talk to a doctor or mental health professional."
+            )
+
+        # SENSITIVE PERSONAL DATA
+        if self._contains_personal_data(user_input):
+            self.logger.info("SafetyFilter: Possible sensitive personal data detected.")
+            return (
+                "You don’t need to share personal details like your real name, address, phone number or IDs with me.\n\n"
+                "It’s enough if you talk in general about your phone habits and how they make you feel, "
+                "and we can reflect on that together. 😊"
+            )
+
+        # LEGAL / FINANCIAL ADVICE
+        if self._contains_any(user_input, self.legal_keywords) or self._contains_any(user_input, self.financial_keywords):
+            self.logger.info("SafetyFilter: Possible legal/financial advice request detected.")
+            return (
+                "I can’t give legal or financial advice.\n\n"
+                "For those questions it’s best to check official websites or talk to a professional. "
+                "If your phone use is adding stress around this, I can help you look at that part."
+            )
+
+        # No special handling needed
+        return None
+
+    def check_model_output(self, response: str) -> str:
+        """
+        Very basic post-check: if the model accidentally gives diagnosis-like text,
+        or asks for personal data / legal/financial details, soften or replace it.
+        """
+        text_l = response.lower()
+
+        # DIAGNOSTIC LANGUAGE
+        if "i think you have" in text_l or "you probably have" in text_l:
+            self.logger.info("SafetyFilter: Possible diagnostic phrasing in output.")
+            return (
+                "I can’t diagnose conditions or say what you have. "
+                "If you’re worried about your health or mental health, "
+                "a doctor or psychologist is the best person to talk to.\n\n"
+                "What I *can* help with is how your phone use might be affecting how you feel."
+            )
+
+        # BOT ASKING FOR PERSONAL DATA
+        ask_personal_patterns = [
+            "what is your address", "tell me your address",
+            "what is your full name", "tell me your full name",
+            "what is your phone number", "tell me your phone number",
+            "what is your email", "tell me your email",
+            "social security number", "passport number", "id number"
+        ]
+        if any(p in text_l for p in ask_personal_patterns):
+            self.logger.info("SafetyFilter: Model asked for personal data, overriding response.")
+            return (
+                "I don’t need personal details like your real name, address, phone number, or ID numbers.\n\n"
+                "Let’s just focus on your phone use and how it affects your day-to-day life. 😊"
+            )
+
+        # BOT GIVING LEGAL / FINANCIAL ADVICE
+        if "this is legal advice" in text_l or "financial advice" in text_l:
+            self.logger.info("SafetyFilter: Model may be giving legal/financial advice, overriding response.")
+            return (
+                "I can’t give legal or financial advice.\n\n"
+                "It’s better to talk to a professional or check official sources for that. "
+                "If your phone use is stressing you out about this situation, we can work on that together."
+            )
+
+        return response
+    
 
 class ConversationManager:
     """Manages conversation flow and context""" 
@@ -247,14 +392,45 @@ class ConversationManager:
         self.logger = logger
         self.kb_matcher = KnowledgeBaseMatcher(config.KB_PATH, logger)
         self.ollama = OllamaClient(config.OLLAMA_MODEL, config.OLLAMA_ENDPOINT, logger)
+        self.safety_filter = SafetyFilter(logger)
         self.messages = [] 
         # Stores messages as list of simple dicts: {"role": "user", "content": "..."}
     
     def process_message(self, user_input: str, stream_callback=None) -> str:
         """Process user message and generate response"""
+
+        # SAFETY / BOUNDARY CHECK BEFORE ANYTHING ELSE
+        safety_reply = self.safety_filter.handle_user_input(user_input)
+        if safety_reply is not None:
+            # Save to history (so context still makes sense)
+            self._add_message("user", user_input)
+            self._add_message("assistant", safety_reply)
+            if stream_callback:
+                # Stream the canned reply in one go
+                stream_callback(safety_reply)
+            return safety_reply
         
         # Get KB matches
         kb_matches = self.kb_matcher.get_best_matches(user_input, top_k=2)
+
+        # Off-topic filter using KB similarity
+        off_topic = False
+        if not kb_matches or kb_matches[0]['score'] < 0.20:
+            off_topic = True
+
+        if off_topic:
+            off_topic_reply = (
+                "I’m mainly here to help with smartphone habits – things like screen time, FOMO, "
+                "notifications, social media, focus and sleep.\n\n"
+                "Your question seems to be about something else. "
+                "If you’d like, you can tell me how your phone use is involved, and we’ll look at that together. 😊"
+            )
+            self._add_message("user", user_input)
+            self._add_message("assistant", off_topic_reply)
+            if stream_callback:
+                stream_callback(off_topic_reply)
+            return off_topic_reply
+
         
         # Check matches and extract source
         match_source = None
@@ -303,6 +479,9 @@ Answer: {best_match['answer']}
         
         # Post-processing-Removes "FitBot:" if the model accidentally outputted it
         response_text = re.sub(r'^FitBot:\s*', '', response_text.strip(), flags=re.IGNORECASE)
+
+        # Safety post-check on model output
+        response_text = self.safety_filter.check_model_output(response_text)
         
         # 6. Adds Source
         if match_source and len(response_text) > 5:
@@ -330,6 +509,17 @@ CORE INSTRUCTIONS:
 4. If the user is just saying "hi", greeting you, or engages in normal conversation reply naturally without pushing advice, be a supportive and listeing friend.
 5. If the user asks a question and NO KB INFO is provided, give general, safe advice about digital well-being, but disclose that this information is not in your knowledgebase yet.
 5. SAFETY: Never diagnose medical conditions. If a user mentions self-harm or severe distress, suggest professional help immediately.
+
+ADDITIONAL SCOPE & BOUNDARIES (ADDED):
+- You ONLY help with: screen time, notifications, FOMO, stress from phone use, social media habits, focus, digital detox, and sleep related to phone use.
+- You encourage self-reflection, give practical tips, and can refer to FitPhone tools or general, reliable resources about digital wellbeing.
+- Do NOT give medical diagnoses (e.g. “Do I have ADHD?”, “Do I have COVID?”, “Am I depressed?”).
+- Do NOT give instructions in emergencies (e.g. chest pain, suicidal thoughts, serious harm). Always recommend contacting emergency services or a professional.
+- Do NOT ask for or process sensitive personal data like full medical histories, addresses, or identification numbers.
+- Do NOT give legal or financial advice. For those topics, suggest the user checks official sources or talks to a professional, and you may only talk about how their phone use affects their stress or wellbeing around it.
+- When a user shares difficult feelings (e.g. loneliness, anxiety about being offline), validate their emotions briefly, then focus on how phone habits play a role and offer small, practical reflection tips. Do not act like a therapist or try to “fix” them.
+- If a user asks about something outside digital wellbeing (e.g. politics, math homework, random trivia), briefly say you are only made for smartphone habits and gently steer the conversation back to that topic.
+- If the user mentions self-harm, suicide, or wanting to hurt others, respond with empathy and strongly encourage them to talk to a trusted person or professional, and mention local emergency services if danger feels immediate.
 
 IMPORTANT:
 - Do NOT start your response with "FitBot:".
