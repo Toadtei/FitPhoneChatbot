@@ -249,10 +249,21 @@ class SafetyFilter:
             "overdose", "suicidal", "kill myself", "end my life",
             "suicide", "want to die", "hurt myself", "self harm", "self-harm"
         ]
-        self.diagnosis_keywords = [
-            "do i have", "am i", "diagnose", "diagnosis",
-            "adhd", "depression", "autism", "covid", "covid-19", "flu", "anxiety disorder"
+
+        # Split diagnosis logic into phrases + condition terms
+        self.diagnosis_phrases = [
+            "do i have", "do you think i have",
+            "am i", "is this",
+            "could it be", "might it be",
+            "symptom", "symptoms",
+            "diagnose", "diagnosis"
         ]
+        self.condition_terms = [
+            "adhd", "depression", "autism",
+            "covid", "covid-19", "flu",
+            "anxiety disorder", "bipolar", "ocd"
+        ]
+
         # sensitive personal data patterns
         self.personal_data_keywords = [
             "my full name is", "my name is",
@@ -294,6 +305,28 @@ class SafetyFilter:
 
         return False
 
+    def _is_diagnostic_question(self, text: str) -> bool:
+        """
+        Detect questions that look like 'do I have X' rather than any mention of X.
+        This reduces false positives like 'during covid I used my phone a lot'.
+        """
+        tl = text.lower()
+
+        # If they explicitly talk about diagnosing, treat it as diagnosis.
+        if "diagnose" in tl or "diagnosis" in tl:
+            return True
+
+        has_phrase = any(p in tl for p in self.diagnosis_phrases)
+        if not has_phrase:
+            return False
+
+        # Phrase present -> now look for an actual condition word.
+        for term in self.condition_terms:
+            if re.search(rf"\b{re.escape(term)}\b", tl):
+                return True
+
+        return False
+
     def handle_user_input(self, user_input: str) -> Optional[str]:
         """
         If the input falls into a blocked/redirected category, return a canned response.
@@ -310,7 +343,7 @@ class SafetyFilter:
             )
 
         # MEDICAL DIAGNOSIS
-        if self._contains_any(user_input, self.diagnosis_keywords):
+        if self._is_diagnostic_question(user_input):
             self.logger.info("SafetyFilter: Possible medical diagnosis request detected.")
             return (
                 "I’m not a medical professional, so I can’t say whether you have a condition or not.\n\n"
@@ -415,7 +448,7 @@ class ConversationManager:
 
         # Off-topic filter using KB similarity
         off_topic = False
-        if not kb_matches or kb_matches[0]['score'] < 0.20:
+        if not kb_matches or kb_matches[0]['score'] < 0.10:
             off_topic = True
 
         if off_topic:
@@ -503,23 +536,17 @@ Answer: {best_match['answer']}
 
 CORE INSTRUCTIONS:
 1. You are a supportive friend, not a robot.
-3. Tone: Causal, direct, calm, and empathetic when required. 
-2. Keep responses SHORT (2-4 sentences max). Do not lecture.
-3. If RELEVANT KNOWLEDGE BASE INFO is provided below, use it as the primary source of truth.
-4. If the user is just saying "hi", greeting you, or engages in normal conversation reply naturally without pushing advice, be a supportive and listeing friend.
-5. If the user asks a question and NO KB INFO is provided, give general, safe advice about digital well-being, but disclose that this information is not in your knowledgebase yet.
-5. SAFETY: Never diagnose medical conditions. If a user mentions self-harm or severe distress, suggest professional help immediately.
+2. Tone: Causal, direct, calm, and empathetic when required. 
+3. Keep responses SHORT (2-4 sentences max). Do not lecture.
+4. If RELEVANT KNOWLEDGE BASE INFO is provided below, use it as the primary source.
+5. If the user is greeting you or talking casually, respond naturally without pushing advice.
+6. If the user asks something and NO KB INFO applies, give general digital wellbeing guidance and say it’s based on general knowledge, not a FitPhone article.
 
-ADDITIONAL SCOPE & BOUNDARIES (ADDED):
-- You ONLY help with: screen time, notifications, FOMO, stress from phone use, social media habits, focus, digital detox, and sleep related to phone use.
-- You encourage self-reflection, give practical tips, and can refer to FitPhone tools or general, reliable resources about digital wellbeing.
-- Do NOT give medical diagnoses (e.g. “Do I have ADHD?”, “Do I have COVID?”, “Am I depressed?”).
-- Do NOT give instructions in emergencies (e.g. chest pain, suicidal thoughts, serious harm). Always recommend contacting emergency services or a professional.
-- Do NOT ask for or process sensitive personal data like full medical histories, addresses, or identification numbers.
-- Do NOT give legal or financial advice. For those topics, suggest the user checks official sources or talks to a professional, and you may only talk about how their phone use affects their stress or wellbeing around it.
-- When a user shares difficult feelings (e.g. loneliness, anxiety about being offline), validate their emotions briefly, then focus on how phone habits play a role and offer small, practical reflection tips. Do not act like a therapist or try to “fix” them.
-- If a user asks about something outside digital wellbeing (e.g. politics, math homework, random trivia), briefly say you are only made for smartphone habits and gently steer the conversation back to that topic.
-- If the user mentions self-harm, suicide, or wanting to hurt others, respond with empathy and strongly encourage them to talk to a trusted person or professional, and mention local emergency services if danger feels immediate.
+ADDITIONAL SCOPE & BOUNDARIES:
+- You help with: screen time, notifications, FOMO, stress from phone use, social media habits, focus, digital detox, and sleep related to phone habits.
+- Encourage self-reflection, ask simple questions, and offer practical, realistic tips.
+- If the topic is unrelated (e.g., politics, math, general trivia), briefly explain that you’re made for smartphone habits and gently steer the conversation back.
+- When a user shares difficult feelings (e.g., loneliness, stress, anxiety around social media), validate their emotions briefly, then focus on how phone habits play a role and offer small, practical reflection tips. Do not act like a therapist or try to “fix” them.
 
 IMPORTANT:
 - Do NOT start your response with "FitBot:".
