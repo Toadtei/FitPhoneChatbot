@@ -4,20 +4,17 @@ FitPhone Chatbot - Conversational AI for Healthy Smartphone Habits
 
 Structure:
     1. Configuration
-
     2. Utilities (Logger, InputValidator)
-
     3. Core Logic
         # Knowledge Base Handler
         # Ollama Connection Client
         # Safety Filter
         # Prompt Builder
-        # Conversation Manager 
-
+        # Conversation Context Manager
+        # Core Message Processor
+        
     4. GUI (UIConfig, UIMessages, Chat Interface)
-
     5. Main Entry Point
-
 
 Knowledge Base JSON Structure (knowledge_base.json):
 [
@@ -76,6 +73,8 @@ class Config:
 # ============================================================================
 
     #Logger
+    #PromptInjectionDetector
+    #InputSanitizer
     #InputValidator
 
 # ============================================================================
@@ -104,45 +103,9 @@ class Logger:
     def success(self, message: str):
         self.log(message, "SUCCESS")
 
-
-class InputSanitizer:
-    """Sanitizes user input to prevent injection attacks"""
-    
-    @staticmethod
-    def sanitize(text: str) -> str:
-        """Sanitize user input - removes dangerous Unicode and escapes special markers"""
-        # Remove zero-width and direction control characters
-        text = re.sub(r'[\u202E\u200D\u2066\u2067\u2068\u2069\u200B\u200C\uFEFF]', '', text)
-        
-        # Remove or escape XML-like tags that could break our prompt structure
-        text = text.replace("<<USER_INPUT>>", "[USER_INPUT]")
-        text = text.replace("<<END_USER_INPUT>>", "[END_USER_INPUT]")
-        text = text.replace("<|im_start|>", "[im_start]")
-        text = text.replace("<|im_end|>", "[im_end]")
-        text = text.replace("<|system|>", "[system]")
-        text = text.replace("<|user|>", "[user]")
-        text = text.replace("<|assistant|>", "[assistant]")
-        
-        # Remove common model special tokens
-        text = text.replace("<s>", "").replace("</s>", "")
-        text = text.replace("[INST]", "").replace("[/INST]", "")
-        text = text.replace("<<SYS>>", "").replace("<</SYS>>", "")
-        
-        return text.strip()
-    
-    @staticmethod
-    def validate_length(text: str, max_length: int) -> tuple:
-        """Returns (text, was_truncated)"""
-        if len(text) > max_length:
-            return text[:max_length], True
-        return text, False
-    
-    @staticmethod
-    def is_empty(text: str) -> bool:
-        """Check if text is empty or whitespace"""
-        return not text or not text.strip()
     
 class PromptInjectionDetector:
+    #TODO: review or expand patterns, add ML-based detection in future or embedding-based similarity check against known injections and catch injections that are paraphrased or with spelling errors
     """Detects potential prompt injection attempts"""
     
     def __init__(self, logger: Logger, config: Config):
@@ -242,6 +205,45 @@ class PromptInjectionDetector:
         """Get number of injection attempts for a session"""
         return self.config.USER_STATUS
     
+
+class InputSanitizer:
+    #TODO: review and expand/remove sanitization rules if needed
+    """Sanitizes user input to prevent injection attacks"""
+    
+    @staticmethod
+    def sanitize(text: str) -> str:
+        """Sanitize user input - removes dangerous Unicode and escapes special markers"""
+        # Remove zero-width and direction control characters
+        text = re.sub(r'[\u202E\u200D\u2066\u2067\u2068\u2069\u200B\u200C\uFEFF]', '', text)
+        
+        # Remove or escape XML-like tags that could break our prompt structure
+        text = text.replace("<<USER_INPUT>>", "[USER_INPUT]")
+        text = text.replace("<<END_USER_INPUT>>", "[END_USER_INPUT]")
+        text = text.replace("<|im_start|>", "[im_start]")
+        text = text.replace("<|im_end|>", "[im_end]")
+        text = text.replace("<|system|>", "[system]")
+        text = text.replace("<|user|>", "[user]")
+        text = text.replace("<|assistant|>", "[assistant]")
+        
+        # Remove common model special tokens
+        text = text.replace("<s>", "").replace("</s>", "")
+        text = text.replace("[INST]", "").replace("[/INST]", "")
+        text = text.replace("<<SYS>>", "").replace("<</SYS>>", "")
+        
+        return text.strip()
+    
+    @staticmethod
+    def validate_length(text: str, max_length: int) -> tuple:
+        """Returns (text, was_truncated)"""
+        if len(text) > max_length:
+            return text[:max_length], True
+        return text, False
+    
+    @staticmethod
+    def is_empty(text: str) -> bool:
+        """Check if text is empty or whitespace"""
+        return not text or not text.strip()
+    
 # ============================================================================
 # SECTION 3: CORE LOGIC
 # ============================================================================
@@ -250,7 +252,8 @@ class PromptInjectionDetector:
     # Ollama Connection Client
     # Safety Filter
     # Prompt Builder
-    # Conversation Manager 
+    # ConversationContextManager 
+    # CoreMessageProcessor
 
 # ============================================================================
 
@@ -428,6 +431,7 @@ class OllamaClient:
 
 
 class SafetyFilter:
+    #TODO: review and expand patterns, maybe sentecne embedding based classification for more robust detection with spelling errors or paraphrasing
     """Rule-based safety & boundary filter"""
 
     def __init__(self, logger: Logger):
@@ -611,6 +615,7 @@ class SafetyFilter:
         
 
 class PromptBuilder:
+    #TODO: review and refine prompt, insted of DO NOT use different instructions, make stronger instruction fow simpler greetings and off-topic handling
     """Builds system prompts and context for AI model"""
     
     @staticmethod
@@ -669,11 +674,55 @@ Answer: {kb_match['answer']}
         })
         
         return messages
+    
 
 
-class ConversationManager:
+class ConversationContextManager:
+    """Manages conversation context and history"""
+
+    def __init__(self, config: Config, logger: Logger, prompt_builder: PromptBuilder):
+        self.config = config
+        self.logger = logger
+        self.prompt_builder = prompt_builder
+        
+        self.messages = []
+    
+    
+    def reset(self):
+        """Reset conversation history"""
+        self.messages = []
+        self.logger.info("Conversation history reset")
+    
+    
+    def _build_context(self, kb_matches):
+        match_source = None
+        kb_context = ""
+        
+        if kb_matches and kb_matches[0]['score'] > self.config.KB_RELEVANCY_THRESHOLD:
+            best_match = kb_matches[0]
+            kb_context = self.prompt_builder.build_kb_context(best_match)
+            match_source = best_match.get('source')
+        else:
+            kb_context = self.prompt_builder.build_no_kb_context()
+        
+        return kb_context, match_source
+    
+    def _add_message(self, role: str, content: str):
+        self.messages.append({
+            "role": role,
+            "content": content,
+            "timestamp": datetime.now()
+        })
+        
+        # Removes the oldest message if max history is reached
+        if len(self.messages) > self.config.MAX_CONVERSATION_HISTORY:
+            self.messages.pop(0)
+
+
+
+class CoreMessageProcessor:
     """Manages conversation flow and context"""
-    #TODO: split into ConverstionContextManager(context, history) and ConversationHandler(global class with processing flow)
+
     def __init__(self, config: Config, logger: Logger):
         self.config = config
         self.logger = logger
@@ -684,6 +733,7 @@ class ConversationManager:
         self.safety_filter = SafetyFilter(logger)
         self.injection_detector = PromptInjectionDetector(logger, config)
         self.prompt_builder = PromptBuilder()
+        self.conversation_context = ConversationContextManager(config, logger, self.prompt_builder)
         
         self.messages = []
     
@@ -717,8 +767,8 @@ class ConversationManager:
         # 3. Safety check
         safety_reply = self.safety_filter.input_boundary_check(santized_input)
         if safety_reply:
-            self._add_message("user", santized_input)
-            self._add_message("assistant", safety_reply)
+            self.conversation_context._add_message("user", santized_input)
+            self.conversation_context._add_message("assistant", safety_reply)
             if stream_callback:
                 stream_callback(safety_reply)
             return safety_reply
@@ -729,14 +779,14 @@ class ConversationManager:
         # 5. Off-topic filter
         if self.kb_matcher._is_off_topic(kb_matches):
             off_topic_reply = self.kb_matcher._get_off_topic_response()
-            self._add_message("user", santized_input)
-            self._add_message("assistant", off_topic_reply)
+            self.conversation_context._add_message("user", santized_input)
+            self.conversation_context._add_message("assistant", off_topic_reply)
             if stream_callback:
                 stream_callback(off_topic_reply)
             return off_topic_reply
         
         # 6. Build context
-        kb_context, match_source = self._build_context(kb_matches)
+        kb_context, match_source = self.conversation_context._build_context(kb_matches)
         
         # 7. Build message list
         api_messages = self._build_api_messages(kb_context, santized_input)
@@ -755,49 +805,20 @@ class ConversationManager:
                 stream_callback(source_text)
         
         # 11. Save to history
-        self._add_message("user", santized_input)
-        self._add_message("assistant", response_text)
+        self.conversation_context._add_message("user", santized_input)
+        self.conversation_context._add_message("assistant", response_text)
         
         return response_text
-    
-    def reset(self):
-        """Reset conversation history"""
-        self.messages = []
-        self.logger.info("Conversation history reset")
-    
-
-    
-    def _build_context(self, kb_matches):
-        match_source = None
-        kb_context = ""
-        
-        if kb_matches and kb_matches[0]['score'] > self.config.KB_RELEVANCY_THRESHOLD:
-            best_match = kb_matches[0]
-            kb_context = self.prompt_builder.build_kb_context(best_match)
-            match_source = best_match.get('source')
-        else:
-            kb_context = self.prompt_builder.build_no_kb_context()
-        
-        return kb_context, match_source
     
     def _build_api_messages(self, kb_context: str, user_input: str):
         system_prompt = self.prompt_builder.get_system_prompt()
         recent_history = self.messages[-self.config.CONTEXT_WINDOW_SIZE:]
         return self.prompt_builder.build_messages(system_prompt, kb_context, recent_history, user_input)
     
-
+    def reset_conversation(self):
+        """Reset conversation history"""
+        self.conversation_context.reset()
     
-    def _add_message(self, role: str, content: str):
-        self.messages.append({
-            "role": role,
-            "content": content,
-            "timestamp": datetime.now()
-        })
-        
-        # Removes the oldest message if max history is reached
-        if len(self.messages) > self.config.MAX_CONVERSATION_HISTORY:
-            self.messages.pop(0)
-
 
 # ============================================================================
 # SECTION 4: GUI
@@ -861,10 +882,10 @@ What would you like to talk about?"""
 class ChatInterface:
     """Tkinter GUI chat interface with message bubbles"""
     
-    def __init__(self, config: Config, logger: Logger):
+    def __init__(self, config: Config, logger: Logger, core: CoreMessageProcessor):
         self.config = config
         self.logger = logger
-        self.conversation = ConversationManager(config, logger)
+        self.conversation = core
         self.input_sanitizer = InputSanitizer()
         self.ui_config = UIConfig()
         
@@ -1128,7 +1149,7 @@ class ChatInterface:
             widget.destroy()
     
     def _start_new_chat(self):
-        self.conversation.reset()
+        self.conversation.reset_conversation
         self._clear_chat_display()
         self._show_welcome_message()
         self.input_field.delete("1.0", tk.END)
@@ -1151,8 +1172,8 @@ def main():
     config = Config()
     logger = Logger(config.LOG_FILE)
     logger.info("Starting FitBot")
-    
-    chat = ChatInterface(config, logger)
+    core = CoreMessageProcessor(config, logger)
+    chat = ChatInterface(config, logger, core)
     chat.start()
 
 
