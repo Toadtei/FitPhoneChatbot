@@ -1,12 +1,21 @@
 """
 FitPhone Chatbot - Conversational AI for Healthy Smartphone Habits
-Single file version with clear separation of concerns
+
 
 Structure:
     1. Configuration
+
     2. Utilities (Logger, InputValidator)
-    3. Core Logic (KB, AI, Safety, Prompts, Conversation)
-    4. GUI (UI Config, Chat Interface)
+
+    3. Core Logic
+        # Knowledge Base Handler
+        # Ollama Connection Client
+        # Safety Filter
+        # Prompt Builder
+        # Conversation Manager 
+
+    4. GUI (UIConfig, UIMessages, Chat Interface)
+
     5. Main Entry Point
 
 
