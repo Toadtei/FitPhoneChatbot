@@ -67,6 +67,8 @@ class Config:
     
     # Input Validation
     MAX_MESSAGE_LENGTH = 1000
+    SESSION_ID = "default_session"  # for future use, to track multiple users/sessions
+    USER_STATUS = "FREE"  # can be BLOCKED, FREE
 
 
 # ============================================================================
@@ -103,39 +105,29 @@ class Logger:
         self.log(message, "SUCCESS")
 
 
-class InputValidator:
-    #TODO: review, this is too constraining, subsittuing some characters that are valid in normal text, also need to make it more specific to our implementation with Ollama to prevent prompt injections
-    #TODO: split into InputSanitizer and InjectionDetector classes
-    #TODO: can add coutner for multiple injections attempts and block user for some time or session - block user if tries to break it multiple times
-    """Validates and sanitizes user input"""
+class InputSanitizer:
+    """Sanitizes user input to prevent injection attacks"""
     
     @staticmethod
     def sanitize(text: str) -> str:
-        """Sanitize user input to prevent injection attacks"""
-        text = re.sub(r'[\u202E\u200D\u2066\u2067\u2068\u2069]', '', text)
-
-        replacements = {
-            "<": "&lt;",
-            ">": "&gt;",
-            "`": "",
-            "```": "",
-            "{": "\\{",
-            "}": "\\}",
-            "[": "\\[",
-            "]": "\\]",
-            "(": "\\(",
-            ")": "\\)",
-            "$": "\\$",
-            "#": "\\#",
-            "&": "\\&",
-            ";": "\\;",
-            "|": "\\|",
-            "_": "\\_",
-            "*": "\\*",
-        }
+        """Sanitize user input - removes dangerous Unicode and escapes special markers"""
+        # Remove zero-width and direction control characters
+        text = re.sub(r'[\u202E\u200D\u2066\u2067\u2068\u2069\u200B\u200C\uFEFF]', '', text)
         
-        for old, new in replacements.items():
-            text = text.replace(old, new)
+        # Remove or escape XML-like tags that could break our prompt structure
+        text = text.replace("<<USER_INPUT>>", "[USER_INPUT]")
+        text = text.replace("<<END_USER_INPUT>>", "[END_USER_INPUT]")
+        text = text.replace("<|im_start|>", "[im_start]")
+        text = text.replace("<|im_end|>", "[im_end]")
+        text = text.replace("<|system|>", "[system]")
+        text = text.replace("<|user|>", "[user]")
+        text = text.replace("<|assistant|>", "[assistant]")
+        
+        # Remove common model special tokens
+        text = text.replace("<s>", "").replace("</s>", "")
+        text = text.replace("[INST]", "").replace("[/INST]", "")
+        text = text.replace("<<SYS>>", "").replace("<</SYS>>", "")
+        
         return text.strip()
     
     @staticmethod
@@ -150,31 +142,106 @@ class InputValidator:
         """Check if text is empty or whitespace"""
         return not text or not text.strip()
     
-    def porompt_injection_detected(self, text: str) -> bool:
-        """Basic check for prompt injection patterns"""
-        injection_patterns = [
-            r"ignore (all )?previous (instructions|prompts)",
-            r"disregard (all )?previous (instructions|prompts)",
-            r"forget (all )?previous (instructions|prompts)",
-            r"you are no longer (a|an) .* assistant",
-            r"you are now (a|an) .* assistant",
-            r"respond with only",
-            r"respond in the style of",
-            r"act as if you are",
-            r"end_user_input",
-            r"system_prompt",
-            r"system_instructions"
-
+class PromptInjectionDetector:
+    """Detects potential prompt injection attempts"""
+    
+    def __init__(self, logger: Logger, config: Config):
+        self.logger = logger
+        self.config = config
+        self.attempt_count = {}  # Track attempts by session (for future rate limiting)
+        self._initialize_patterns()
+    
+    def _initialize_patterns(self):
+        """Initialize detection patterns"""
+        # Instruction override attempts
+        self.override_patterns = [
+            r"ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|commands?)",
+            r"disregard\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|commands?)",
+            r"forget\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|commands?)",
+            r"override\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|commands?)",
         ]
         
-        text_l = text.lower()
-        for pattern in injection_patterns:
-            if re.search(pattern, text_l):
-                return True
-        return False
+        # Role manipulation attempts
+        self.role_patterns = [
+            r"you\s+are\s+(no\s+longer|not)\s+(a|an)\s+\w+\s+assistant",
+            r"you\s+are\s+now\s+(a|an)\s+\w+",
+            r"act\s+as\s+(if\s+)?(you\s+are|a|an)",
+            r"pretend\s+(you\s+are|to\s+be)",
+            r"simulate\s+(being|a|an)",
+            r"roleplay\s+as",
+        ]
+        
+        
+        # System prompt leakage attempts
+        self.system_patterns = [
+            r"(show|reveal|display|print|output)\s+(me\s+)?(your|the)\s+system\s+(prompt|instructions?)",
+            r"what\s+(are|is)\s+your\s+(system\s+)?(prompt|instructions?)",
+            r"repeat\s+(your|the)\s+system\s+(prompt|instructions?)",
+            r"system_prompt",
+            r"system_instructions",
+            r"<\|system\|>",
+            r"<\|im_start\|>system",
+        ]
+        
+        # Delimiter injection attempts
+        self.delimiter_patterns = [
+            r"<<USER_INPUT>>",
+            r"<<END_USER_INPUT>>",
+            r"end_user_input",
+            r"<\|im_end\|>",
+            r"\[INST\]",
+            r"\[/INST\]",
+            r"<<SYS>>",
+            r"<</SYS>>",
+        ]
     
-   
-
+    def check(self, text: str) ->  Optional[str]:
+        """
+        Detect injection attempts.
+        Returns: None + response message
+        """
+        text_lower = text.lower()
+        
+        # Check each pattern category + logged reason if detected
+        checks = [
+            (self.override_patterns, "instruction override attempt"),
+            (self.role_patterns, "role manipulation attempt"),
+            (self.system_patterns, "system prompt leakage attempt"),
+            (self.delimiter_patterns, "delimiter injection attempt"),
+        ]
+        
+        for patterns, reason in checks:
+            for pattern in patterns:
+                if re.search(pattern, text_lower, re.IGNORECASE):
+                    self.logger.info(f"Injection detected ({reason}): {pattern[:50]}...")
+                    
+                    return self._handle_injection_attempt(self.config.SESSION_ID)
+        
+        return None
+    def _handle_injection_attempt(self, session_id: str) -> str:
+        """Handle detected injection attempt"""
+        
+        self.attempt_count[session_id] = self.attempt_count.get(session_id, 0) + 1
+        if self.attempt_count[session_id] > 2:
+            self.logger.error(f"Multiple injection attempts detected for session: {session_id}")
+            self.config.USER_STATUS = "BLOCKED"
+            self.logger.success(f"User with session: {session_id} has been BLOCKED due to repeated injection attempts.")
+            return (
+                "Due to repeated attempts to manipulate my behavior, "
+                "I am unable to continue this conversation. "
+                "If you believe this is a mistake, please contact the FitPhone support team."
+            )
+        return (
+            "I noticed your message contains patterns that look like instructions meant to change how I work."
+            "I'm designed to help with smartphone habits, and I can't process requests like that."
+            "If you have a genuine question about phone use, screen time, or digital wellbeing, "
+            "I'm happy to help!"
+        )
+    
+    def get_injection_status(self) -> int:
+        """Get number of injection attempts for a session"""
+        return self.config.USER_STATUS
+    
 # ============================================================================
 # SECTION 3: CORE LOGIC
 # ============================================================================
@@ -615,55 +682,80 @@ class ConversationManager:
         self.kb_matcher = KnowledgeBaseHandler(config.KB_PATH, logger, config)
         self.ollama = OllamaClient(config.OLLAMA_MODEL, config.OLLAMA_ENDPOINT, logger)
         self.safety_filter = SafetyFilter(logger)
+        self.injection_detector = PromptInjectionDetector(logger, config)
         self.prompt_builder = PromptBuilder()
         
         self.messages = []
     
     def process_message(self, user_input: str, stream_callback: Optional[Callable] = None) -> str:
         """Process user message and generate response"""
+
+        #INPUT alredy checked for empty and length in the GUI part
+
+
+        # 0. Check if user is blocked
+        if self.config.USER_STATUS == "BLOCKED":
+            blocked_msg = (
+                "Your access to FitBot has been blocked due to repeated attempts to manipulate my behavior. "
+                "If you believe this is a mistake, please contact the FitPhone support team."
+            )
+            if stream_callback:
+                stream_callback(blocked_msg)
+            return blocked_msg
+
+        # 1. Injection detection
+        injection_detection_result = self.injection_detector.check(user_input)
+        if injection_detection_result:
+            if stream_callback:
+                stream_callback(injection_detection_result)
+            return injection_detection_result
         
-        # 1. Safety check
-        safety_reply = self.safety_filter.input_boundary_check(user_input)
+        
+        # 2. Sanitize input    
+        santized_input = InputSanitizer.sanitize(user_input)
+
+        # 3. Safety check
+        safety_reply = self.safety_filter.input_boundary_check(santized_input)
         if safety_reply:
-            self._add_message("user", user_input)
+            self._add_message("user", santized_input)
             self._add_message("assistant", safety_reply)
             if stream_callback:
                 stream_callback(safety_reply)
             return safety_reply
         
-        # 2. Get KB matches
-        kb_matches = self.kb_matcher.get_best_matches(user_input, top_k=2)
+        # 4. Get KB matches
+        kb_matches = self.kb_matcher.get_best_matches(santized_input, top_k=2)
         
-        # 3. Off-topic filter
+        # 5. Off-topic filter
         if self.kb_matcher._is_off_topic(kb_matches):
             off_topic_reply = self.kb_matcher._get_off_topic_response()
-            self._add_message("user", user_input)
+            self._add_message("user", santized_input)
             self._add_message("assistant", off_topic_reply)
             if stream_callback:
                 stream_callback(off_topic_reply)
             return off_topic_reply
         
-        # 4. Build context
+        # 6. Build context
         kb_context, match_source = self._build_context(kb_matches)
         
-        # 5. Build message list
-        api_messages = self._build_api_messages(kb_context, user_input)
+        # 7. Build message list
+        api_messages = self._build_api_messages(kb_context, santized_input)
         
-        # 6. Generate response
+        # 8. Generate response
         response_text = self.ollama.generate_stream(api_messages, stream_callback)
         
-        # 7. Post-process response
+        # 9. Post-process response
         response_text = self.safety_filter.output_boundary_check(response_text)
         
-        # 8. Add source if available
+        # 10. Add source if available
         if match_source and len(response_text) > 5:
             source_text = f"\n\nSource: {match_source}"
             response_text += source_text
             if stream_callback:
                 stream_callback(source_text)
         
-        # 9. Save to history
-        self._add_message("user", user_input)
+        # 11. Save to history
+        self._add_message("user", santized_input)
         self._add_message("assistant", response_text)
         
         return response_text
@@ -773,7 +865,7 @@ class ChatInterface:
         self.config = config
         self.logger = logger
         self.conversation = ConversationManager(config, logger)
-        self.validator = InputValidator()
+        self.input_sanitizer = InputSanitizer()
         self.ui_config = UIConfig()
         
         self.token_queue = queue.Queue()
@@ -994,11 +1086,11 @@ class ChatInterface:
         
         user_input = self.input_field.get("1.0", tk.END).strip()
 
-        if self.validator.is_empty(user_input):
+        if self.input_sanitizer.is_empty(user_input):
             self._append_message("bot", UIMessages.EMPTY_MESSAGE)
             return
 
-        user_input, was_truncated = self.validator.validate_length(
+        user_input, was_truncated = self.input_sanitizer.validate_length(
             user_input, self.config.MAX_MESSAGE_LENGTH
         )
         if was_truncated:
@@ -1007,7 +1099,6 @@ class ChatInterface:
             ))
         
         self.input_field.delete("1.0", tk.END)
-        user_input = self.validator.sanitize(user_input)
         
         self._append_message("user", user_input)
         
