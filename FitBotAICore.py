@@ -56,8 +56,9 @@ class Config:
     KB_PATH = "knowledgebase.json"
     CONTEXT_WINDOW_SIZE = 8 # number of messages we are sending to the LLM to proccess and understand the context, 
     MAX_CONVERSATION_HISTORY = 10 #maybe for future, how many messages are we storing in genearl, can be later use for things like summarize the conversation
-    LOG_FILE = "fitbot.log"
     
+    LOG_FILE = f"fitbot_{datetime.now().strftime('%Y-%m-%d_%H.%M.%S')}.log"    
+
     # Safety & Filtering
     KB_RELEVANCY_THRESHOLD = 0.35 # cosine similarity threshold for KB match relevance, what source we send to the LLM and display to the user
     OFF_TOPIC_THRESHOLD = 0.10  # treshold to determine if the user query is off-topic and automatically respond with off-topic message, instead of querying the LLM and waste processing power
@@ -78,30 +79,81 @@ class Config:
     #InputValidator
 
 # ============================================================================
+import threading, atexit, sys
+from datetime import datetime
 
 class Logger:
-    """Simple logging utility that writes to file"""
-    
+    """Thread-safe logger that writes to a persistent file and prints to stdout."""
     def __init__(self, log_file: str):
         self.log_file = log_file
-        with open(self.log_file, 'w', encoding='utf-8') as f:
-            f.write(f"FitBot Log Started: {datetime.now()} ===\n\n")
-    
-    def log(self, message: str, level: str = "INFO"):
-        """Write a log entry with timestamp"""
+        self._lock = threading.Lock()
+        # Use append to preserve logs across runs (safer than 'w')
+        try:
+            self._f = open(self.log_file, 'a', encoding='utf-8', buffering=1)  # line-buffered
+        except Exception as e:
+            # Fatal fallback: print to stderr and set file handle to None
+            print(f"[Logger init error] Couldn't open {self.log_file}: {e}", file=sys.stderr)
+            self._f = None
+        header = f"FitBot Log Started: {datetime.now()} ===\n\n"
+        try:
+            with self._lock:
+                if self._f:
+                    self._f.write(header)
+                    self._f.flush()
+            print(header, end='', file=sys.stdout)
+        except Exception as e:
+            print(f"[Logger header write failed] {e}", file=sys.stderr)
+        atexit.register(self._close)
+
+    def _write(self, message: str, level: str):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"[{timestamp}] {level}: {message}\n"
-        with open(self.log_file, 'a', encoding='utf-8') as f:
-            f.write(log_entry)
-    
+        with self._lock:
+            try:
+                if self._f:
+                    self._f.write(log_entry)
+                    self._f.flush()
+            except Exception as e:
+                # try to fallback to stderr
+                print("[Logger write failed:]", e, file=sys.stderr)
+                try:
+                    print(log_entry, file=sys.stderr, end='')
+                except Exception:
+                    pass
+        # also print to stdout so GUI + console show logs in real-time
+        try:
+            print(log_entry, end='', file=sys.stdout)
+        except Exception:
+            pass
+
+    def _close(self):
+        try:
+            with self._lock:
+                if self._f and not self._f.closed:
+                    self._f.close()
+        except Exception:
+            pass
+
+    def log(self, message: str, level: str = "INFO"):
+        try:
+            self._write(message, level)
+        except Exception as e:
+            print(f"[Logger.log exception] {e}", file=sys.stderr)
+
     def error(self, message: str):
         self.log(message, "ERROR")
-    
+
     def info(self, message: str):
         self.log(message, "INFO")
-    
+
     def success(self, message: str):
         self.log(message, "SUCCESS")
+
+    def debug(self, message: str):
+        self.log(message, "DEBUG")
+
+    def warning(self, message: str):
+        self.log(message, "WARNING")
 
     
 class PromptInjectionDetector:
@@ -176,7 +228,7 @@ class PromptInjectionDetector:
         for patterns, reason in checks:
             for pattern in patterns:
                 if re.search(pattern, text_lower, re.IGNORECASE):
-                    self.logger.info(f"Injection detected ({reason}): {pattern[:50]}...")
+                    self.logger.warning(f"Injection detected ({reason}): {pattern[:50]}...")
                     
                     return self._handle_injection_attempt(self.config.SESSION_ID)
         
@@ -186,7 +238,7 @@ class PromptInjectionDetector:
         
         self.attempt_count[session_id] = self.attempt_count.get(session_id, 0) + 1
         if self.attempt_count[session_id] > 2:
-            self.logger.error(f"Multiple injection attempts detected for session: {session_id}")
+            self.logger.success(f"Multiple injection attempts detected for session: {session_id}")
             self.config.USER_STATUS = "BLOCKED"
             self.logger.success(f"User with session: {session_id} has been BLOCKED due to repeated injection attempts.")
             return (
@@ -310,8 +362,10 @@ class KnowledgeBaseHandler:
         Find the KB entries with closest meaning to the user's message,
         using cosine similarity between embeddings.
         """
+        self.logger.debug(f"Finding best matches for user input: {user_input}")
         user_input = user_input.strip()
         if not user_input:
+            self.logger.warning("Empty user input for KB matching.")
             return []
 
         # Convert the user message into an embedding vector
@@ -345,12 +399,19 @@ class KnowledgeBaseHandler:
                 "score": score
             })
 
+        self.logger.debug(f"Top {top_k} KB matches found with scores: {[r['score'] for r in results]}")
         return results
 
     def _is_off_topic(self, kb_matches) -> bool:
         if not kb_matches:
+            self.logger.debug("Off-topic detected: no KB matches found")
             return True
-        return kb_matches[0]['score'] < self.config.OFF_TOPIC_THRESHOLD
+        
+        off_topic = kb_matches[0]['score'] < self.config.OFF_TOPIC_THRESHOLD
+        if off_topic:
+            self.logger.debug(f"Off-topic detected: top KB match score {kb_matches[0]['score']:.4f} below threshold {self.config.OFF_TOPIC_THRESHOLD}")
+            return True
+        return False
     
     def _get_off_topic_response(self) -> str:
         return (
@@ -384,6 +445,8 @@ class OllamaClient:
     
     def generate_stream(self, messages: List[Dict], stream_callback: Optional[Callable] = None) -> str:
         """Generate response with streaming output"""
+
+        self.logger.info("Sending request to Ollama...")
         #UPDATED to send strucutred messages isnted of raw text
         import requests
         
@@ -420,6 +483,7 @@ class OllamaClient:
                     except json.JSONDecodeError:
                         continue
             
+            self.logger.success("Received full response from Ollama")
             return full_response
             
         except Exception as e:
@@ -567,6 +631,7 @@ class SafetyFilter:
             )
 
         # No special handling needed
+        self.logger.debug("SafetyFilter: Input passed boundary checks.")
         return None
 
     def output_boundary_check(self, response: str) -> str:
@@ -611,6 +676,7 @@ class SafetyFilter:
             )
         
         # REMOVE BOT PREFIXES
+        self.logger.debug("SafetyFilter: Output passed boundary checks.")
         return re.sub(r'^FitBot:\s*', '', response.strip(), flags=re.IGNORECASE)
         
 
@@ -717,7 +783,9 @@ class ConversationContextManager:
         # Removes the oldest message if max history is reached
         if len(self.messages) > self.config.MAX_CONVERSATION_HISTORY:
             self.messages.pop(0)
-
+    
+    def get_messages(self) -> List[Dict]:
+        return self.messages
 
 
 class CoreMessageProcessor:
@@ -735,16 +803,17 @@ class CoreMessageProcessor:
         self.prompt_builder = PromptBuilder()
         self.conversation_context = ConversationContextManager(config, logger, self.prompt_builder)
         
-        self.messages = []
     
     def process_message(self, user_input: str, stream_callback: Optional[Callable] = None) -> str:
         """Process user message and generate response"""
 
+        self.logger.debug(f"Processing user input: {user_input[:50]}...")
         #INPUT alredy checked for empty and length in the GUI part
 
 
         # 0. Check if user is blocked
         if self.config.USER_STATUS == "BLOCKED":
+            self.logger.warning("Blocked user attempted to send a message.")
             blocked_msg = (
                 "Your access to FitBot has been blocked due to repeated attempts to manipulate my behavior. "
                 "If you believe this is a mistake, please contact the FitPhone support team."
@@ -763,6 +832,8 @@ class CoreMessageProcessor:
         
         # 2. Sanitize input    
         santized_input = InputSanitizer.sanitize(user_input)
+        if santized_input != user_input:
+            self.logger.debug("User input had to be sanitized.")
 
         # 3. Safety check
         safety_reply = self.safety_filter.input_boundary_check(santized_input)
@@ -790,6 +861,13 @@ class CoreMessageProcessor:
         
         # 7. Build message list
         api_messages = self._build_api_messages(kb_context, santized_input)
+        self.logger.debug(f"Built {len(api_messages)} messages for API call.")
+        self.logger.debug(f"System prompt snippet: {api_messages[0]['content'][:100]}...")
+        self.logger.debug(f"User input snippet: {api_messages[-1]['content'][:100]}...")
+        self.logger.debug(f"Conversation history length: {len(self.conversation_context.messages)}")
+        self.logger.debug(f"KB Context snippet: {kb_context[:100]}...")
+        self.logger.debug(f"Match source: {match_source}")
+        self.logger.debug(api_messages)
         
         # 8. Generate response
         response_text = self.ollama.generate_stream(api_messages, stream_callback)
@@ -812,7 +890,7 @@ class CoreMessageProcessor:
     
     def _build_api_messages(self, kb_context: str, user_input: str):
         system_prompt = self.prompt_builder.get_system_prompt()
-        recent_history = self.messages[-self.config.CONTEXT_WINDOW_SIZE:]
+        recent_history = self.conversation_context.messages[-self.config.CONTEXT_WINDOW_SIZE:]
         return self.prompt_builder.build_messages(system_prompt, kb_context, recent_history, user_input)
     
     def reset_conversation(self):
@@ -1115,6 +1193,7 @@ class ChatInterface:
             user_input, self.config.MAX_MESSAGE_LENGTH
         )
         if was_truncated:
+            self.logger.warning("User input was truncated due to length.")
             self._append_message("bot", UIMessages.MESSAGE_TRUNCATED.format(
                 max_length=self.config.MAX_MESSAGE_LENGTH
             ))
@@ -1130,6 +1209,7 @@ class ChatInterface:
         self._append_message("thinking", "Thinking...")
         self._animate_dots()
         
+        self.logger.info("Starting background thread to process user message.")
         threading.Thread(target=self._process_response, args=(user_input,), daemon=True).start()
     
     def _process_response(self, user_input: str):
@@ -1141,15 +1221,24 @@ class ChatInterface:
                 state['is_first_token'] = False
             self.token_queue.put(('token', token))
 
-        self.conversation.process_message(user_input, stream_callback)
-        self.token_queue.put(('done', None))
+        try: 
+            self.logger.debug("Starting to process user message in background thread.")
+            self.conversation.process_message(user_input, stream_callback)
+            self.logger.debug("Finished processing user message.")
+        
+        except Exception as e:
+            self.logger.error(f"Error processing user message: {e}")
+
+        finally:
+            self.token_queue.put(('done', None))
     
     def _clear_chat_display(self):
         for widget in self.msg_frame.winfo_children():
             widget.destroy()
     
     def _start_new_chat(self):
-        self.conversation.reset_conversation
+        self.logger.info(f'Starting new chat session.')
+        self.conversation.reset_conversation()
         self._clear_chat_display()
         self._show_welcome_message()
         self.input_field.delete("1.0", tk.END)
@@ -1173,7 +1262,9 @@ def main():
     logger = Logger(config.LOG_FILE)
     logger.info("Starting FitBot")
     core = CoreMessageProcessor(config, logger)
+    logger.success("FitBot Core Processor initialized")
     chat = ChatInterface(config, logger, core)
+    logger.success("FitBot Chat Interface initialized")
     chat.start()
 
 
