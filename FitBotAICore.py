@@ -4,7 +4,9 @@ FitPhone Chatbot - Conversational AI for Healthy Smartphone Habits
 
 Structure:
     1. Configuration
-    2. Utilities (Logger, InputValidator)
+    2. Utilities 
+        #PromptInjectionDetector
+        #InputSanitizer
     3. Core Logic
         # Knowledge Base Handler
         # Ollama Connection Client
@@ -12,7 +14,6 @@ Structure:
         # Prompt Builder
         # Conversation Context Manager
         # Core Message Processor
-        
     4. GUI (UIConfig, UIMessages, Chat Interface)
     5. Main Entry Point
 
@@ -159,7 +160,7 @@ class Logger:
     
 class PromptInjectionDetector:
     #TODO: review or expand patterns, add ML-based detection in future or embedding-based similarity check against known injections and catch injections that are paraphrased or with spelling errors
-    """Detects potential prompt injection attempts"""
+    """Detects potential prompt injection attempts, happens before input sanitization to catch raw attempts and block user not to waste processing power"""
     
     def __init__(self, logger: Logger, config: Config):
         self.logger = logger
@@ -261,7 +262,7 @@ class PromptInjectionDetector:
 
 class InputSanitizer:
     #TODO: review and expand/remove sanitization rules if needed
-    """Sanitizes user input to prevent injection attacks"""
+    """Sanitizes user input to prevent injection attacks happens after the injection detection, serves as an additional layer of defense and to clean up the input for better processing for the LLM"""
     
     @staticmethod
     def sanitize(text: str) -> str:

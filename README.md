@@ -1,3 +1,33 @@
+Structure:
+   1. Configuration
+   2. Utilities 
+       #PromptInjectionDetector
+       #InputSanitizer
+   3. Core Logic
+       #Knowledge Base Handler
+       #Ollama Connection Client
+       #Safety Filter
+       #Prompt Builder
+       #Conversation Context Manager
+       #Core Message Processor
+   4. GUI (UIConfig, UIMessages, Chat Interface)
+   5. Main Entry Point
+
+Rough flow:
+1. GUI - User Input
+2. Core Message Processor (Processes the message)
+   3. InputSanitizer(length and some text type)
+   4. PromptInjectionDetector
+   5. InputSanitizer(removes confusing charachters to clean to prompt send to LLM)
+   6. Safety Filter (checks for boundaries of users request)
+   7. Knowledge Base Handler (finds best matching Q-A pairs)
+   8. Conversation Context Manager (retrieves the conversation history)
+   9. Prompt Builder (Builds the prompt send to LLM)
+   10. Ollama Connection Client
+   11. Safety Filter (checks the streamed output for boundaries violation)
+12. GUI - message displayed
+
+
 BEFORE YOU START WORKING:
 - ALWAYS GIT PULL
 - AFTER YOU FINISH, COMMIT AND PUSH
