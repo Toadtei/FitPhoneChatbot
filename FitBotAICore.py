@@ -35,6 +35,7 @@ import json
 import re
 import os
 from datetime import datetime
+import time
 from typing import List, Dict, Optional, Callable
 import threading
 import queue
@@ -344,7 +345,9 @@ class KnowledgeBaseHandler:
         # checks if the jsnon file exists with specifide path from class Config
         if not os.path.exists(path):
             self.logger.error(f'Knowledge base not found: {path}')
-            exit(1)
+            self.logger.warning("Exiting due to missing knowledge base.")
+            time.sleep(3)
+            exit(0)
 
         # reads the json KB
         with open(path, 'r', encoding='utf-8') as f:
