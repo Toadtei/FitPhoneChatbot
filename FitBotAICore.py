@@ -46,6 +46,7 @@ from tkinter import scrolledtext, ttk
 from sentence_transformers import SentenceTransformer, util
 import numpy as np
 
+import webbrowser
 
 # ============================================================================
 # SECTION 1: CONFIGURATION
@@ -895,7 +896,6 @@ class CoreMessageProcessor:
     
     def process_message(self, user_input: str, stream_callback: Optional[Callable] = None) -> str:
         """Process user message and generate response"""
-
         self.logger.debug(f"Processing user input: {user_input[:50]}...")
         #INPUT alredy checked for empty and length in the GUI part
 
@@ -932,7 +932,7 @@ class CoreMessageProcessor:
             if stream_callback:
                 stream_callback(safety_reply)
             return safety_reply
-        
+
         # 4. Get KB matches
         kb_matches = self.kb_matcher.get_best_matches(santized_input, top_k=2)
         
@@ -957,16 +957,13 @@ class CoreMessageProcessor:
         self.logger.debug(f"KB Context snippet: {kb_context[:100]}...")
         self.logger.debug(f"Match source: {match_source}")
         self.logger.debug(api_messages)
-        
         # 8. Generate response
         response_text = self.ollama.generate_stream(api_messages, stream_callback)
-        
         # 9. Post-process response
         response_text = self.safety_filter.output_boundary_check(response_text)
-        
         # 10. Add source if available
         if match_source and len(response_text) > 5:
-            source_text = f"\n\nSource: {match_source}"
+            source_text = f"\n\nSource: |{match_source}"
             response_text += source_text
             if stream_callback:
                 stream_callback(source_text)
@@ -1222,7 +1219,7 @@ class ChatInterface:
             justify=tk.LEFT, wraplength=wrap_len
         )
         label.pack()
-        
+
         if role in ("bot", "thinking"):
             self.current_msg_label = label
             
@@ -1233,7 +1230,42 @@ class ChatInterface:
             current_text = self.current_msg_label.cget("text")
             self.current_msg_label.config(text=current_text + text)
             self._scroll_to_bottom()
-    
+
+    def _append_link(self, link_data):
+        """
+        Displays a clickable link in the interface.
+        link_data must be a string in the form “Link text|URL.”
+        """
+        # Separate the text to be displayed and the URL
+        if "|" in link_data:
+            link_text, link_url = link_data.split("|", 1)
+
+        # Create a frame to contain the text “Source:” and the link
+        link_frame = tk.Frame(self.current_msg_label.master, bg=self.current_msg_label.cget("bg"))
+        link_frame.pack(anchor="w", pady=(6, 0))
+
+        # Add the text “Source:” (not clickable)
+        source_label = tk.Label(
+            link_frame,
+            text="Source: ",
+            font=("Segoe UI", 10),
+            fg="white",  # Ou la couleur de ton choix
+            bg=self.current_msg_label.cget("bg")
+        )
+        source_label.pack(side=tk.LEFT)
+
+        # Add the clickable link (URL)
+        url_label = tk.Label(
+            link_frame,
+            text=link_url,
+            font=("Segoe UI", 10, "underline"),
+            fg="#4da6ff",
+            bg=self.current_msg_label.cget("bg"),
+            cursor="hand2"
+        )
+        url_label.pack(side=tk.LEFT)
+        url_label.bind("<Button-1>", lambda e, url=link_url: webbrowser.open(url))
+
     def _animate_dots(self, frame=0):
         if not self.is_processing:
             return
@@ -1261,6 +1293,8 @@ class ChatInterface:
                         self.current_msg_label.config(text="", fg="white")
                 elif msg_type == 'token':
                     self._append_text(data)
+                elif msg_type == 'link':
+                    self._append_link(data)
                 elif msg_type == 'done':
                     self.is_processing = False
                     self.send_button.config(state=tk.NORMAL)
@@ -1311,7 +1345,6 @@ class ChatInterface:
     
     def _process_response(self, user_input: str):
         state = {'is_first_token': True}
-        
         def stream_callback(token):
             if state['is_first_token']:
                 self.token_queue.put(('start', None))
