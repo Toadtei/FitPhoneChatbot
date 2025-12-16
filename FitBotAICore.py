@@ -28,6 +28,9 @@ Knowledge Base JSON Structure (knowledge_base.json):
 ]
 """
 
+
+import pickle
+import hashlib
 import json
 import re
 import os
@@ -52,6 +55,8 @@ class Config:
     # AI Model Settings
     OLLAMA_MODEL = "phi3:mini"
     OLLAMA_ENDPOINT = "http://localhost:11434"
+
+    SENTENCE_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
     
     # Knowledge Base
     KB_PATH = "knowledgebase.json"
@@ -312,14 +317,15 @@ class InputSanitizer:
 # ============================================================================
 
 class KnowledgeBaseHandler:
-    """Matches user queries with KB using sentence embeddings"""
-    #TODO: optimize by loading and saving embeddings from disk to avoid recomputation on each start
-    #TODO: add checksum or timestamp to only recompute if KB file changed
+    """Matches user queries with KB using sentence embeddings
+    Also computes the embedding cache on initialization if needed"""
     
     def __init__(self, kb_path: str, logger: Logger, config: Config):
         self.logger = logger
         self.config = config
+        self.kb_path = kb_path
         self.kb = self._load_kb(kb_path)
+        self.cache_path = kb_path.replace(".json", ".embeddings.pkl")
         self.model = None
         self.kb_embeddings = None
         self._build_embedding_cache()
@@ -344,10 +350,66 @@ class KnowledgeBaseHandler:
         self.logger.success(f"Loaded {len(kb)} KB entries")
         return kb
     
+    def _get_kb_checksum(self) -> str:
+        """Compute a simple checksum of the KB for cache validation"""
+        with open(self.kb_path, 'rb') as f:
+            return hashlib.md5(f.read()).hexdigest()
+        
+    def _load_embedding_cache(self) -> bool:
+        """Load embedding cache if valid"""
+        if not os.path.exists(self.cache_path):
+            self.logger.info("No existing embedding cache found.")
+            return False
+        
+        try:
+            with open(self.cache_path, 'rb') as f:
+                cache_data = pickle.load(f)
+            cached_checksum = cache_data.get("checksum")
+            current_checksum = self._get_kb_checksum()
+
+            if cached_checksum != current_checksum:
+                self.logger.info("KB has changed since last cache.")
+                return False
+
+            if len(cache_data.get("embeddings", [])) != len(self.kb):
+                self.logger.warning("Embedding cache size mismatch.")
+                return False
+            
+            self.kb_embeddings = cache_data["embeddings"]
+            self.logger.success("Loaded KB embedding cache from disk.")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Failed to load embedding cache: {e}")
+            return False
+        
+    def _save_embedding_cache(self):
+        """Save embedding cache to disk"""
+        try:
+            cache_data = {
+                "checksum": self._get_kb_checksum(),
+                "embeddings": self.kb_embeddings,
+                "kb_size": len(self.kb)
+            }
+
+            with open(self.cache_path, 'wb') as f:
+                pickle.dump(cache_data, f)
+            self.logger.success("Saved KB embedding cache to disk.")
+
+        except Exception as e:
+            self.logger.error(f"Failed to save embedding cache: {e}")
+
     def _build_embedding_cache(self):
-        """Build embedding cache for all KB entries"""
-        self.logger.info("Loading sentence embedding model (all-MiniLM-L6-v2)...")
-        self.model = SentenceTransformer("all-MiniLM-L6-v2")
+        """Build or Load embedding cache for all KB entries"""
+
+        self.logger.info("Loading sentence embedding model... " + self.config.SENTENCE_EMBEDDING_MODEL)
+        self.model = SentenceTransformer(self.config.SENTENCE_EMBEDDING_MODEL)
+        
+        self.logger.info("Checking for existing KB embedding cache...")
+        
+        if self._load_embedding_cache():
+            return
+        
         
         kb_texts = [f"{entry['q']} {entry['a']}" for entry in self.kb]
         
@@ -358,6 +420,7 @@ class KnowledgeBaseHandler:
             convert_to_tensor=True
         )
         self.logger.success("KB Embedding Cache ready")
+        self._save_embedding_cache()
     
     def get_best_matches(self, user_input: str, top_k: int = 3) -> List[Dict]:
         """
