@@ -330,12 +330,14 @@ class KnowledgeBaseHandler:
         self.logger = logger
         self.config = config
         self.kb_path = kb_path
-        self.kb = self._load_kb(kb_path)
         self.cache_path = kb_path.replace(".json", ".embeddings.pkl")
-        self.model = None
-        self.kb_embeddings = None
-        self._build_embedding_cache()
+        
+        # Initialize core components
+        self.kb = self._load_kb(kb_path)
+        self.model = self._load_embedding_model()
+        self.kb_embeddings = self._initialize_embeddings()
     
+
     def _load_kb(self, path: str) -> List[Dict]:
         """Load knowledge base from JSON"""
         
@@ -360,41 +362,75 @@ class KnowledgeBaseHandler:
         """Compute a simple checksum of the KB for cache validation"""
         with open(self.kb_path, 'rb') as f:
             return hashlib.md5(f.read()).hexdigest()
+    
+    
+    def _load_embedding_model(self) -> SentenceTransformer:
+        """Load the sentence embedding model"""
+        self.logger.info("Loading sentence embedding model... " + self.config.SENTENCE_EMBEDDING_MODEL)
+        return SentenceTransformer(self.config.SENTENCE_EMBEDDING_MODEL)
+    
+    
+    def _initialize_embeddings(self):
+        """Build or Load embedding cache for all KB entries"""
+        self.logger.info("Checking for existing KB embedding cache...")
         
-    def _load_embedding_cache(self) -> bool:
+        # Try to load from cache first
+        cached_embeddings = self._load_embedding_cache()
+        if cached_embeddings is not None:
+            return cached_embeddings
+        
+        # Cache miss - compute embeddings
+        return self._compute_and_save_embeddings()
+    
+    def _load_embedding_cache(self):
         """Load embedding cache if valid"""
         if not os.path.exists(self.cache_path):
             self.logger.info("No existing embedding cache found.")
-            return False
+            return None
         
         try:
             with open(self.cache_path, 'rb') as f:
                 cache_data = pickle.load(f)
+            
             cached_checksum = cache_data.get("checksum")
             current_checksum = self._get_kb_checksum()
 
             if cached_checksum != current_checksum:
                 self.logger.info("KB has changed since last cache.")
-                return False
+                return None
 
             if len(cache_data.get("embeddings", [])) != len(self.kb):
                 self.logger.warning("Embedding cache size mismatch.")
-                return False
+                return None
             
-            self.kb_embeddings = cache_data["embeddings"]
-            self.logger.success("Loaded KB embedding cache from disk.")
-            return True
+            self.logger.success("Found and Loaded KB embedding cache from disk.")
+            return cache_data["embeddings"]
 
         except Exception as e:
             self.logger.error(f"Failed to load embedding cache: {e}")
-            return False
+            return None
+    
+    def _compute_and_save_embeddings(self):
+        """Compute embeddings from scratch and save to cache"""
+        kb_texts = [f"{entry['q']} {entry['a']}" for entry in self.kb]
         
-    def _save_embedding_cache(self):
+        self.logger.info(f"Building Embedding Cache for {len(kb_texts)} entries...")
+        embeddings = self.model.encode(
+            kb_texts,
+            normalize_embeddings=True,
+            convert_to_tensor=True
+        )
+        self.logger.success("KB Embedding Cache ready")
+        
+        self._save_embedding_cache(embeddings)
+        return embeddings
+    
+    def _save_embedding_cache(self, embeddings):
         """Save embedding cache to disk"""
         try:
             cache_data = {
                 "checksum": self._get_kb_checksum(),
-                "embeddings": self.kb_embeddings,
+                "embeddings": embeddings,
                 "kb_size": len(self.kb)
             }
 
@@ -405,28 +441,6 @@ class KnowledgeBaseHandler:
         except Exception as e:
             self.logger.error(f"Failed to save embedding cache: {e}")
 
-    def _build_embedding_cache(self):
-        """Build or Load embedding cache for all KB entries"""
-
-        self.logger.info("Loading sentence embedding model... " + self.config.SENTENCE_EMBEDDING_MODEL)
-        self.model = SentenceTransformer(self.config.SENTENCE_EMBEDDING_MODEL)
-        
-        self.logger.info("Checking for existing KB embedding cache...")
-        
-        if self._load_embedding_cache():
-            return
-        
-        
-        kb_texts = [f"{entry['q']} {entry['a']}" for entry in self.kb]
-        
-        self.logger.info(f"Building Embedding Cache for {len(kb_texts)} entries...")
-        self.kb_embeddings = self.model.encode(
-            kb_texts,
-            normalize_embeddings=True,
-            convert_to_tensor=True
-        )
-        self.logger.success("KB Embedding Cache ready")
-        self._save_embedding_cache()
     
     def get_best_matches(self, user_input: str, top_k: int = 3) -> List[Dict]:
         """
