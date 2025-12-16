@@ -52,6 +52,9 @@ import numpy as np
 
 class Config:
     """Configuration settings"""
+    LOGGING_LEVEL = "DEBUG"  # DEBUG, INFO, NONE
+
+
     # AI Model Settings
     OLLAMA_MODEL = "phi3:mini"
     OLLAMA_ENDPOINT = "http://localhost:11434"
@@ -151,13 +154,16 @@ class Logger:
         self.log(message, "ERROR")
 
     def info(self, message: str):
-        self.log(message, "INFO")
+        if Config.LOGGING_LEVEL in ["INFO", "DEBUG"]:
+            self.log(message, "INFO")
 
     def success(self, message: str):
-        self.log(message, "SUCCESS")
+        if Config.LOGGING_LEVEL in ["INFO", "DEBUG"]:
+            self.log(message, "SUCCESS")
 
     def debug(self, message: str):
-        self.log(message, "DEBUG")
+        if Config.LOGGING_LEVEL == "DEBUG":
+            self.log(message, "DEBUG")
 
     def warning(self, message: str):
         self.log(message, "WARNING")

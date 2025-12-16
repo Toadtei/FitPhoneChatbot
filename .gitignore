@@ -7,9 +7,8 @@
 fitbot_*.log
 fitbot.log
 
-knowledgebase_embeddings.pkl
-*_embeddings.pkl
-
+*embeddings.pkl
+knowledgebase.embeddings.pkl
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
