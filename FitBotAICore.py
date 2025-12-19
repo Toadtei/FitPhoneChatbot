@@ -311,6 +311,17 @@ class InputSanitizer:
         """Check if text is empty or whitespace"""
         return not text or not text.strip()
     
+    @staticmethod
+    def sanitize_output(text: str) -> str:
+        """Sanitize model output - remove sources/references and bot prefixes and truncate if too long"""
+       
+        sanitized_response_text = re.sub(r"\n*\s*(source|references?)\s*[:\-].*", "", text, flags=re.IGNORECASE)
+        sanitized_response_text = re.sub(r'^FitBot:\s*', '', sanitized_response_text.strip(), flags=re.IGNORECASE)
+        
+        if len(sanitized_response_text) > 1000:
+            return sanitized_response_text[:1000] + "...Sorry, my response is too long and was cut off, try simplifying your question."
+        return sanitized_response_text
+    
 # ============================================================================
 # SECTION 3: CORE LOGIC
 # ============================================================================
@@ -766,7 +777,7 @@ class SafetyFilter:
         
         # REMOVE BOT PREFIXES
         self.logger.debug("SafetyFilter: Output passed boundary checks.")
-        return re.sub(r'^FitBot:\s*', '', response.strip(), flags=re.IGNORECASE)
+        return response
         
 
 class PromptBuilder:
@@ -911,8 +922,8 @@ class CoreMessageProcessor:
     def process_message(self, user_input: str, stream_callback: Optional[Callable] = None) -> str:
         """Process user message and generate response"""
         self.logger.debug(f"Processing user input: {user_input[:50]}...")
-        #INPUT alredy checked for empty and length in the GUI part
 
+        # -1 INPUT alredy checked for empty and length in the GUI part
 
         # 0. Check if user is blocked
         if self.config.USER_STATUS == "BLOCKED":
@@ -931,9 +942,9 @@ class CoreMessageProcessor:
             if stream_callback:
                 stream_callback(injection_detection_result)
             return injection_detection_result
-        
-        
-        # 2. Sanitize input    
+
+
+        # 2. Sanitize input (after injection detection check, to clean the input for LLM)
         santized_input = InputSanitizer.sanitize(user_input)
         if santized_input != user_input:
             self.logger.debug("User input had to be sanitized.")
@@ -1011,12 +1022,7 @@ class CoreMessageProcessor:
         response_text = self.ollama.generate_stream(api_messages, stream_callback)
         
         # 8. Post-process response (Remove hallucinated sources)
-        response_text = re.sub(
-            r"\n*\s*(source|references?)\s*[:\-].*",
-            "",
-            response_text,
-            flags=re.IGNORECASE
-        )
+        response_text = InputSanitizer.sanitize_output(response_text)
         
         # 9. Output Safety Check
         response_text = self.safety_filter.output_boundary_check(response_text)
