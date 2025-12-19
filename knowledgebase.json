@@ -1,5 +1,29 @@
 [
   {
+    "q": "Hello",
+    "a": "Hi! How are you doing? What can I help you today?", 
+    "source": "",
+    "category": "greeting"
+  },
+  {
+    "q": "Hi there",
+    "a": "Hello! How are you doing? What can I help you today?",
+    "source": "",
+    "category": "greeting"
+  },
+  {
+    "q": "Good morning",
+    "a": "Hi there! How are you doing? What can I help you today?",
+    "source": "",
+    "category": "greeting"
+  },
+  {
+    "q": "Hey",
+    "a": "Hello! How are you doing? What can I help you today?",
+    "source": "",
+    "category": "greeting"
+  },
+  {
     "q": "How can I reduce my screen time?",
     "a": "Start by checking your daily phone usage and set small limits. Try turning off notifications or setting 'no phone' times during meals or before bed.",
     "source": "https://www.healthline.com/health/how-to-reduce-screen-time"
