@@ -313,7 +313,19 @@ class InputSanitizer:
     
     @staticmethod
     def sanitize_output(text: str) -> str:
-        """Sanitize model output - remove sources/references and bot prefixes and truncate if too long"""
+        """Sanitize model output - remove sources/references, hallucination patterns, and bot prefixes and truncate if too long"""
+
+        patterns_to_remove = [
+            r"\n\s*###\s*Exercise.*",
+            r"\n\s*###\s*Subtopics.*",
+            r"\n\s*Follow-up Questions:.*",
+            r"\n\s*FitBot-generated Response:.*",
+            r"\n\s*Exercises?:.*",
+            r"\n\s*1\.\s*What are the.*" # Catches numbered lists starting abruptly after an answer
+        ]
+
+        for pattern in patterns_to_remove:
+            text = re.sub(pattern, "", text, flags=re.IGNORECASE | re.DOTALL)
        
         sanitized_response_text = re.sub(r"\n*\s*(source|references?)\s*[:\-].*", "", text, flags=re.IGNORECASE)
         sanitized_response_text = re.sub(r'^FitBot:\s*', '', sanitized_response_text.strip(), flags=re.IGNORECASE)
