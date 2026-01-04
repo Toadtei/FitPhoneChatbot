@@ -1221,16 +1221,27 @@ class ChatInterface:
         bubble_wrapper.pack(anchor=container_anchor)
         
         message = message.replace("\\", "")
-        
-        label = tk.Label(
-            bubble_wrapper, text=message, font=bubble_font,
-            bg=bg_color, fg=text_color, padx=20, pady=12,
-            justify=tk.LEFT, wraplength=wrap_len
+        bubble = tk.Frame(
+            bubble_wrapper,
+            bg=bg_color,
+            padx=20,
+            pady=12
         )
-        label.pack()
+        bubble.pack()
+        label = tk.Label(
+            bubble,
+            text=message,
+            font=bubble_font,
+            bg=bg_color,
+            fg=text_color,
+            justify=tk.LEFT,
+            wraplength=wrap_len
+        )
+        label.pack(anchor="w")
 
         if role in ("bot", "thinking"):
             self.current_msg_label = label
+            self.current_msg_bubble = bubble
             
         self._scroll_to_bottom()
     
@@ -1351,39 +1362,77 @@ class ChatInterface:
         
         self.logger.info("Starting background thread to process user message.")
         threading.Thread(target=self._process_response, args=(user_input,), daemon=True).start()
-    
     def _process_response(self, user_input: str):
-        state = {'is_first_token': True}
-        source_detector = ""
-        source_detected = False
+        state = {
+            'is_first_token': True,
+            'buffer': '',
+            'llm_source_detected': False,
+            'response_complete': False
+        }
         def stream_callback(token):
-            nonlocal source_detector, source_detected
-            source_detector += token
-            source_detector = source_detector[-50:]
+            print(token)
+            # If we have already finished processing the source, ignore everything.
+            if state['response_complete']:
+                return
+            state['buffer'] += token
 
-            if re.search(r"(Source\s*)", source_detector, re.IGNORECASE):
-                source_detected = True
+            # Detects OUR formatted source (with the pipe) FIRST
+            if "Source: |" in state['buffer']:
+                state['response_complete'] = True
+                parts = state['buffer'].split("Source: |", 1)
+                text_part = parts[0].rstrip()
+                source_part = parts[1] if len(parts) > 1 else ""
+                if state['is_first_token']:
+                    self.token_queue.put(('start', None))
+                    state['is_first_token'] = False
+                if text_part:
+                    for char in text_part:
+                        self.token_queue.put(('token', char))
+                if source_part:
+                    self.token_queue.put(('link', "Source: |" + source_part))
                 return
 
-            if state['is_first_token']:
-                self.token_queue.put(('start', None))
-                state['is_first_token'] = False
-            if not ("Source: |" in token) and not source_detected:
-                self.token_queue.put(('token', token))
-            elif "Source: |" in token:
-                self.token_queue.put(('link', token))
+            # Detects the source of the LLM (without pipe) to ignore it
+            llm_source_match = re.search(r'\n*\s*Source\s*:\s*(?!\|)', state['buffer'], re.IGNORECASE)
+            if llm_source_match:
+                state['llm_source_detected'] = True
+                text_part = state['buffer'][:llm_source_match.start()].rstrip()
+                if state['is_first_token']:
+                    self.token_queue.put(('start', None))
+                    state['is_first_token'] = False
+                if text_part:
+                    for char in text_part:
+                        self.token_queue.put(('token', char))
+                state['buffer'] = ''
+                return
 
-        try: 
+            # If the LLM has generated its source, we are waiting for our formatted source.
+            if state['llm_source_detected']:
+                return
+            if len(state['buffer']) > 30:
+                to_send = state['buffer'][:-25]
+                state['buffer'] = state['buffer'][-25:]
+                if state['is_first_token']:
+                    self.token_queue.put(('start', None))
+                    state['is_first_token'] = False
+                for char in to_send:
+                    self.token_queue.put(('token', char))
+        try:
             self.logger.debug("Starting to process user message in background thread.")
             self.conversation.process_message(user_input, stream_callback)
+            if state['buffer'] and not state['response_complete']:
+                if state['is_first_token']:
+                    self.token_queue.put(('start', None))
+                final_text = state['buffer'].rstrip()
+                if final_text:
+                    for char in final_text:
+                        self.token_queue.put(('token', char))
             self.logger.debug("Finished processing user message.")
-        
         except Exception as e:
             self.logger.error(f"Error processing user message: {e}")
-
         finally:
             self.token_queue.put(('done', None))
-    
+
     def _clear_chat_display(self):
         for widget in self.msg_frame.winfo_children():
             widget.destroy()
