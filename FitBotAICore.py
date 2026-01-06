@@ -48,6 +48,8 @@ import numpy as np
 
 import webbrowser
 
+import unicodedata
+
 # ============================================================================
 # SECTION 1: CONFIGURATION
 # ============================================================================
@@ -171,6 +173,54 @@ class Logger:
         self.log(message, "WARNING")
 
     
+
+class TextGuard:
+    _ZERO_WIDTH_RE = re.compile(r'[\u202E\u200D\u2066\u2067\u2068\u2069\u200B\u200C\uFEFF]')
+    _MULTISPACE_RE = re.compile(r'\s+')
+    _NONALNUM_RE = re.compile(r'[^a-z0-9]+')
+
+    # Small leetspeak map (extend carefully)
+    _LEET_MAP = str.maketrans({
+        "@": "a",
+        "$": "s",
+        "0": "o",
+        "1": "i",
+        "!": "i",
+        "3": "e",
+        "4": "a",
+        "5": "s",
+        "7": "t",
+    })
+
+    @staticmethod
+    def normalize(text: str) -> str:
+        # Unicode normalize
+        t = unicodedata.normalize("NFKC", text)
+        t = TextGuard._ZERO_WIDTH_RE.sub("", t)
+        t = t.lower()
+        t = t.translate(TextGuard._LEET_MAP)
+        t = TextGuard._MULTISPACE_RE.sub(" ", t).strip()
+        return t
+
+    @staticmethod
+    def squashed_alnum(text: str) -> str:
+        # For creative spacing and punctuation: "s u i c i d e" -> "suicide"
+        t = TextGuard.normalize(text)
+        t = TextGuard._NONALNUM_RE.sub("", t)
+        return t
+
+    @staticmethod
+    def obfuscated_word_regex(word: str) -> str:
+        """
+        Build a regex that matches the word even with junk between chars.
+        Example: 'suicide' -> \bs\W*u\W*i\W*c\W*i\W*d\W*e\b
+        """
+        w = re.escape(TextGuard.squashed_alnum(word))
+        if not w:
+            return re.escape(word)
+        return r"\b" + r"\W*".join(list(w)) + r"\b"
+
+
 class PromptInjectionDetector:
     #TODO: review or expand patterns, add ML-based detection in future or embedding-based similarity check against known injections and catch injections that are paraphrased or with spelling errors
     """Detects potential prompt injection attempts, happens before input sanitization to catch raw attempts and block user not to waste processing power"""
@@ -179,7 +229,25 @@ class PromptInjectionDetector:
         self.logger = logger
         self.config = config
         self._initialize_patterns()
-    
+        self._compile_patterns()
+
+        # Extra squashed triggers for common bypasses
+        self._squashed_triggers = [
+            "ignorepreviousinstructions",
+            "disregardpreviousinstructions",
+            "forgetpreviousinstructions",
+            "overridepreviousinstructions",
+            "systemprompt",
+            "systeminstructions",
+            "revealthesystemprompt",
+            "printthesystemprompt",
+            "showthesystemprompt",
+            "displaythesystemprompt",
+            "imstartsystem",  # for example "<|im_start|>system" without separators
+            "system_prompt",
+            "system_instructions",
+        ]
+
     def _initialize_patterns(self):
         """Initialize detection patterns"""
         # Instruction override attempts
@@ -209,7 +277,7 @@ class PromptInjectionDetector:
             r"system_prompt",
             r"system_instructions",
             r"<\|system\|>",
-            r"<\|im_start\|>system",
+            r"<\|im_start\|>\s*system",
         ]
         
         # Delimiter injection attempts
@@ -224,13 +292,8 @@ class PromptInjectionDetector:
             r"<</SYS>>",
         ]
     
-    def check(self, text: str) ->  Optional[str]:
-        """
-        Detect injection attempts.
-        Returns: None + response message
-        """
-        text_lower = text.lower()
-        
+    def _compile_patterns(self):
+        self._compiled_patterns = []
         # Check each pattern category + logged reason if detected
         checks = [
             (self.override_patterns, "instruction override attempt"),
@@ -240,11 +303,24 @@ class PromptInjectionDetector:
         ]
         
         for patterns, reason in checks:
-            for pattern in patterns:
-                if re.search(pattern, text_lower, re.IGNORECASE):
-                    self.logger.warning(f"Injection detected ({reason}): {pattern[:50]}...")
-                    
-                    return self._handle_injection_attempt(self.config.SESSION_ID)
+            for p in patterns:
+                self._compiled_patterns.append((re.compile(p, re.IGNORECASE), reason, p))
+
+    def check(self, text: str) -> Optional[str]:
+        norm = TextGuard.normalize(text)
+        squashed = TextGuard.squashed_alnum(text)
+
+        # 1) Existing regex patterns on normalized text
+        for cre, reason, p in self._compiled_patterns:
+            if cre.search(norm):
+                self.logger.warning(f"Injection detected ({reason}): {p[:60]}...")
+                return self._handle_injection_attempt(self.config.SESSION_ID)
+
+        # 2) Squashed trigger checks (handles spacing/punct/leetspeak)
+        for trig in self._squashed_triggers:
+            if TextGuard.squashed_alnum(trig) in squashed:
+                self.logger.warning(f"Injection detected (obfuscated trigger): {trig}")
+                return self._handle_injection_attempt(self.config.SESSION_ID)
         
         return None
     def _handle_injection_attempt(self, session_id: str) -> str:
@@ -268,7 +344,7 @@ class PromptInjectionDetector:
             "I'm happy to help!"
         )
     
-    def get_injection_status(self) -> int:
+    def get_injection_status(self) -> str:
         """Get number of injection attempts for a session"""
         return self.config.USER_STATUS
     
@@ -623,6 +699,9 @@ class SafetyFilter:
             "suicide", "want to die", "hurt myself", "self harm", "self-harm"
         ]
 
+        # Pre normalize emergency keywords once (faster per message)
+        self._emergency_keywords_norm = [TextGuard.normalize(k) for k in self.emergency_keywords]
+
         # Split diagnosis logic into phrases + condition terms
         self.diagnosis_phrases = [
             "do i have", "do you think i have",
@@ -658,9 +737,25 @@ class SafetyFilter:
             "health plan", "insurance plan", "mortgage", "loan"
         ]
 
-    def _contains_any(self, text: str, keywords) -> bool:
-        text_l = text.lower()
-        return any(kw in text_l for kw in keywords)
+        # Obfuscation tolerant regexes for self harm terms (compile once)
+        self._selfharm_core = [
+            re.compile(TextGuard.obfuscated_word_regex("suicide"), re.IGNORECASE),
+            re.compile(TextGuard.obfuscated_word_regex("selfharm"), re.IGNORECASE),
+            re.compile(TextGuard.obfuscated_word_regex("killmyself"), re.IGNORECASE),
+        ]
+
+        # Obfuscation tolerant regexes for other single token emergency words
+        self._emergency_obfus_res = []
+        for kw in self.emergency_keywords:
+            base = TextGuard.squashed_alnum(kw)
+
+            if base and len(base) >= 6 and " " not in kw:
+                self._emergency_obfus_res.append(
+                    re.compile(TextGuard.obfuscated_word_regex(kw), re.IGNORECASE)
+                )
+
+    def _contains_any(self, norm_text: str, keywords_norm) -> bool:
+        return any(kw in norm_text for kw in keywords_norm)
 
     def _contains_personal_data(self, text: str) -> bool:
         """Detect obvious personal data patterns like email, phone, address phrases."""
@@ -706,15 +801,31 @@ class SafetyFilter:
         If the input falls into a blocked/redirected category, return a canned response.
         If it's fine, return None and the normal flow continues.
         """
+        norm = TextGuard.normalize(user_input)
+        squashed = TextGuard.squashed_alnum(norm)
 
-        # EMERGENCY / CRISIS
-        if self._contains_any(user_input, self.emergency_keywords):
-            self.logger.info("SafetyFilter: Emergency-like input detected.")
-            return (
-                "That sounds really serious and I’m not able to help with emergencies.\n\n"
-                "Please contact your local emergency number or a medical professional immediately, "
-                "or reach out to someone you trust. You don’t have to deal with this alone. ❤️"
-            )
+        emergency_msg = (
+            "That sounds really serious and I’m not able to help with emergencies.\n\n"
+            "If you’re in immediate danger or thinking about harming yourself, please call your local emergency number now.\n\n"
+            "If you’re in the Netherlands: call 112 for emergencies. For someone to talk to, you can contact 113 Zelfmoordpreventie (113 or 0800-0113)."
+        )
+
+        # 1) FAST PATH: normalized phrase/keyword contains (covers “can't breathe”, “chest pain”, etc.)
+        if self._contains_any(norm, self._emergency_keywords_norm):
+            self.logger.info("SafetyFilter: Emergency-like input detected (keyword/phrase).")
+            return emergency_msg
+
+        # 2) OBFUSCATION PATH: core self harm terms
+        for cre in self._selfharm_core:
+            if cre.search(norm) or cre.search(squashed):
+                self.logger.info("SafetyFilter: Self-harm detected (obfuscated core).")
+                return emergency_msg
+
+        # 3) OBFUSCATION PATH: other single token emergency terms
+        for cre in self._emergency_obfus_res:
+            if cre.search(norm) or cre.search(squashed):
+                self.logger.info("SafetyFilter: Emergency-like input detected (obfuscated).")
+                return emergency_msg
 
         # MEDICAL DIAGNOSIS
         if self._is_diagnostic_question(user_input):
@@ -735,7 +846,10 @@ class SafetyFilter:
             )
 
         # LEGAL / FINANCIAL ADVICE
-        if self._contains_any(user_input, self.legal_keywords) or self._contains_any(user_input, self.financial_keywords):
+        if (
+            any(k in user_input.lower() for k in self.legal_keywords)
+            or any(k in user_input.lower() for k in self.financial_keywords)
+        ):
             self.logger.info("SafetyFilter: Possible legal/financial advice request detected.")
             return (
                 "I can’t give legal or financial advice.\n\n"
