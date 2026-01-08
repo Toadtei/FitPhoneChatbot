@@ -39,6 +39,7 @@ import time
 from typing import List, Dict, Optional, Callable
 import threading
 import queue
+import sys
 
 import tkinter as tk
 from tkinter import scrolledtext, ttk
@@ -1445,7 +1446,7 @@ class ChatInterface:
         """
         # Separate the text to be displayed and the URL
         if "|" in link_data:
-            link_text, link_url = link_data.split("|", 1)
+            link_text, source = link_data.split("|", 1)
 
         # Create a frame to contain the text “Source:” and the link
         link_frame = tk.Frame(self.current_msg_label.master, bg=self.current_msg_label.cget("bg"))
@@ -1456,22 +1457,78 @@ class ChatInterface:
             link_frame,
             text="Source: ",
             font=("Segoe UI", 10),
-            fg="white",  # Ou la couleur de ton choix
+            fg="white",
             bg=self.current_msg_label.cget("bg")
         )
         source_label.pack(side=tk.LEFT)
 
-        # Add the clickable link (URL)
-        url_label = tk.Label(
-            link_frame,
-            text=link_url,
-            font=("Segoe UI", 10, "underline"),
-            fg="#4da6ff",
-            bg=self.current_msg_label.cget("bg"),
-            cursor="hand2"
-        )
-        url_label.pack(side=tk.LEFT)
-        url_label.bind("<Button-1>", lambda e, url=link_url: webbrowser.open(url))
+        # Check if the source is a URL
+        is_url = source.startswith("http://") or source.startswith("https://")
+
+        if is_url:
+            # It is a URL → blue underlined clickable link
+            url_label = tk.Label(
+                link_frame,
+                text=source,
+                font=("Segoe UI", 10, "underline"),
+                fg="#4da6ff",
+                bg=self.current_msg_label.cget("bg"),
+                cursor="hand2"
+            )
+            url_label.pack(side=tk.LEFT)
+            url_label.bind("<Button-1>", lambda e, url=source: webbrowser.open(url))
+        else:
+            # This is a local document name → clickable text in green
+            doc_label = tk.Label(
+                link_frame,
+                text=source,
+                font=("Segoe UI", 10, "underline"),
+                fg="#66cc66",
+                bg=self.current_msg_label.cget("bg"),
+                cursor="hand2"
+            )
+            doc_label.pack(side=tk.LEFT)
+
+            # Opens the local document when clicked
+            doc_label.bind("<Button-1>", lambda e, doc=source: self._open_local_document(doc))
+
+    def _open_local_document(self, document_name):
+        """
+        Opens a local document from the ‘sources’ folder
+        """
+        # Path to the source file
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        source_folder = os.path.join(script_dir, "sources")
+
+        # Search for the file in the source folder
+        file_path = None
+        exact_path = os.path.join(source_folder, document_name)
+        if os.path.exists(exact_path):
+            file_path = exact_path
+        else:
+            test_path = os.path.join(source_folder, document_name + '.pdf')
+            if os.path.exists(test_path):
+                file_path = test_path
+
+        if file_path:
+            try:
+                # Opens the document with the system's default application
+                if os.name == 'nt':  # Windows
+                    os.startfile(file_path)
+                elif os.name == 'posix':  # macOS/Linux
+                    import subprocess
+                    if sys.platform == 'darwin':  # macOS
+                        subprocess.call(['open', file_path])
+                    else:  # Linux
+                        subprocess.call(['xdg-open', file_path])
+
+                self.logger.info(f"Opened local document: {file_path}")
+            except Exception as e:
+                self.logger.error(f"Failed to open document {file_path}: {e}")
+                self._append_message("bot", f"Sorry, I couldn't open the document. '{document_name}'.")
+        else:
+            self.logger.warning(f"Document not found: {document_name}")
+            self._append_message("bot", f"The document '{document_name}' was not found")
 
     def _animate_dots(self, frame=0):
         if not self.is_processing:
@@ -1617,6 +1674,7 @@ class ChatInterface:
         except Exception as e:
             self.logger.error(f"Error processing user message: {e}")
         finally:
+            self.token_queue.put(('done', None))
             self.token_queue.put(('done', None))
 
     def _clear_chat_display(self):
