@@ -1,5 +1,29 @@
 [
   {
+    "q": "Hello",
+    "a": "Hi! How are you doing? What can I help you today?", 
+    "source": "",
+    "category": "greeting"
+  },
+  {
+    "q": "Hi there",
+    "a": "Hello! How are you doing? What can I help you today?",
+    "source": "",
+    "category": "greeting"
+  },
+  {
+    "q": "Good morning",
+    "a": "Hi there! How are you doing? What can I help you today?",
+    "source": "",
+    "category": "greeting"
+  },
+  {
+    "q": "Hey",
+    "a": "Hello! How are you doing? What can I help you today?",
+    "source": "",
+    "category": "greeting"
+  },
+  {
     "q": "How can I reduce my screen time?",
     "a": "Start by checking your daily phone usage and set small limits. Try turning off notifications or setting 'no phone' times during meals or before bed.",
     "source": "https://www.healthline.com/health/how-to-reduce-screen-time"
@@ -58,11 +82,6 @@
     "q": "What's the 20-20-20 rule?",
     "a": "Every 20 minutes, look at something 20 feet away for 20 seconds. It helps reduce eye strain from screens.",
     "source": "https://www.healthline.com/health/eye-health/20-20-20-rule#overview"
-  },
-  {
-    "q": "How can I use my phone more mindfully?",
-    "a": "Before unlocking your phone, ask: 'Why am I using it right now?' This small pause helps you stay intentional.",
-    "source": "https://technosapiens.substack.com/p/a-mindful-approach-to-your-phone"
   },
   {
     "q": "Are there apps that help reduce screen time?",
@@ -253,5 +272,490 @@
     "q": "How do I get started with FitPhone on the site?",
     "a": "You can start by doing the self-research/QuickScan on the site (or via the app being developed), use the provided help-forms to set values and goals, then select and follow challenges that fit your goals.",
     "source": "https://fitphone.nl/"
+  },
+  {
+    "q": "How much time do people actually spend on screens each day?",
+    "a": "On average, people spend almost 9 hours a day using screens like smartphones, laptops, TVs, and tablets. For many, screens are part of everyday life.",
+    "source": "Gezond Schermgebruik - Week van de Mediawijsheid 2025 (Motivaction)"
+  },
+  {
+    "q": "Why do young people feel more negative about their screen use?",
+    "a": "Young people often feel less in control and experience more stress, guilt, or frustration about screen use — even when their total screen time is similar to older people.",
+    "source": "Gezond Schermgebruik - Week van de Mediawijsheid 2025 (Motivaction)"
+  },
+  {
+    "q": "Why is it so hard to change my phone habits?",
+    "a": "Because screen use is often automatic. Many people scroll out of habit, boredom, or to escape reality — without consciously deciding to do so.",
+    "source": "Gezond Schermgebruik - Week van de Mediawijsheid 2025 (Motivaction)"
+  },
+  {
+    "q": "Does scrolling help me relax?",
+    "a": "Sometimes it feels relaxing, but long, unconscious screen use often leaves people feeling tired or drained instead of refreshed.",
+    "source": "Gezond Schermgebruik - Week van de Mediawijsheid 2025 (Motivaction)"
+  },
+  {
+    "q": "Why do I feel surprised when I see my screen time?",
+    "a": "Many people underestimate their actual screen time. Seeing the real numbers can be surprising — and that surprise often motivates change.",
+    "source": "Gezond Schermgebruik - Week van de Mediawijsheid 2025 (Motivaction)"
+  },
+  {
+    "q": "What helps people reduce screen time successfully?",
+    "a": "Small, realistic changes work best — like no phone at the dinner table or keeping screens out of the bedroom. Clear alternatives help too.",
+    "source": "Gezond Schermgebruik - Week van de Mediawijsheid 2025 (Motivaction)"
+  },
+  {
+    "q": "Why do I check my phone when I'm bored?",
+    "a": "For many people, grabbing their phone is an automatic response to boredom. It's a learned habit — not a lack of willpower.",
+    "source": "Gezond Schermgebruik - Week van de Mediawijsheid 2025 (Motivaction)"
+  },
+  {
+    "q": "Is feeling 'addicted' to my phone common?",
+    "a": "Yes. About 6 out of 10 people describe screen use as addictive. Apps are designed to keep your attention — it's not just you.",
+    "source": "Gezond Schermgebruik - Week van de Mediawijsheid 2025 (Motivaction)"
+  },
+  {
+    "q": "Does using my phone before bed affect my sleep?",
+    "a": "Yes. Screen use before sleep can disrupt melatonin production, making it harder to fall asleep — even if it feels relaxing.",
+    "source": "Gezond Schermgebruik - Week van de Mediawijsheid 2025 (Motivaction)"
+  },
+  {
+    "q": "Why do I feel tired after a long day of screen use?",
+    "a": "Unconscious, prolonged screen time can overload your brain. Many people feel mentally exhausted after a full day behind screens.",
+    "source": "Gezond Schermgebruik - Week van de Mediawijsheid 2025 (Motivaction)"
+  },
+  {
+    "q": "Does talking about screen use help?",
+    "a": "Yes. People who talk with friends or family about screen habits are more open to change and feel more supported.",
+    "source": "Gezond Schermgebruik - Week van de Mediawijsheid 2025 (Motivaction)"
+  },
+  {
+    "q": "What's the best mindset for healthier phone use?",
+    "a": "A positive mindset helps most. Seeing the benefits — more rest, focus, and offline time — makes change easier than forcing strict rules.",
+    "source": "Gezond Schermgebruik - Week van de Mediawijsheid 2025 (Motivaction)"
+  },
+  {
+    "q": "How many people use social media in the Netherlands?",
+    "a": "About 7 out of 10 internet users in the Netherlands use social media. Platforms like Facebook, Twitter and messaging apps are the most popular.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "Do most young people use social media?",
+    "a": "Yes. Almost all young people who use the internet are active on social media. Among 18-25 year olds, usage is close to 100%.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "Why do older people use social media less?",
+    "a": "Social media use decreases with age. Older users are online less often and usually have fewer digital habits and skills.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "Does gender affect social media use?",
+    "a": "Not much. Men and women use social media about equally, although women use social networks slightly more and men use professional platforms more.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "Does education level influence social media use?",
+    "a": "Overall, education level doesn't strongly affect whether someone uses social media, but it does affect *which* platforms they use.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "Are social media users online more often?",
+    "a": "Yes. Almost all social media users go online daily, and many are connected throughout the day via their smartphone.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "Why do social media users check their phone so often?",
+    "a": "Because they are online more frequently and often use mobile internet. Constant access makes checking your phone feel automatic.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "Do social media users have better digital skills?",
+    "a": "Yes. People who use social media generally have stronger internet skills, like searching online, managing settings, or communicating digitally.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "Is social media use linked to being more outspoken online?",
+    "a": "Yes. Social media users are more likely to read or share opinions about social or political topics online than non-users.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "Do young people talk about politics on social media?",
+    "a": "Less than older users. Younger people use social media more, but older users are more active in online debates and discussions.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "Does social media use mean I'm more engaged with society?",
+    "a": "It can. Social media users are more likely to follow, read, or participate in discussions about social and political issues online.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "What mainly determines whether someone uses social media?",
+    "a": "Age is the biggest factor. The younger someone is, the more likely they are to use social media.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "Do digital skills matter for social media use?",
+    "a": "Yes. The more internet skills someone has, the higher the chance they actively use social media platforms.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "Is using social media the same as using the internet a lot?",
+    "a": "Often yes. Social media users are more active online overall and use mobile internet more frequently than non-users.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "Does everyone experience social media the same way?",
+    "a": "No. Age and digital skills shape how people use social media and how often they're online.",
+    "source": "CBS - Sociale media: gebruik en gebruikers (2013)"
+  },
+  {
+    "q": "How do I know which apps I use too much?",
+    "a": "Check your screen time in your phone settings. It shows how much time you spend on each app and helps you spot which ones are most addictive for you.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "Why should I check my screen time first?",
+    "a": "Because awareness is the first step. Once you see where your time goes, it's easier to decide what you want to change.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "Do push notifications really make me use my phone more?",
+    "a": "Yes. Notifications are designed to grab your attention and pull you back into apps — even when you didn't plan to use your phone.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "What's an easy way to reduce phone distractions?",
+    "a": "Turn off push notifications for apps like social media. You'll check them more intentionally instead of reacting automatically.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "Does my home screen affect how much I use my phone?",
+    "a": "Yes. Having addictive apps on your home screen makes it easier to open them without thinking. A cleaner home screen reduces temptation.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "Should I remove social media apps from my phone?",
+    "a": "If they distract you a lot, yes. You can still use them on a laptop or tablet at fixed times instead of scrolling all day.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "Why are free apps so addictive?",
+    "a": "Many free apps earn money through ads. The longer you stay in the app, the more money they make — so they're designed to keep you hooked.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "Are there apps that help me use my phone less?",
+    "a": "Yes. Apps like Forest or Flipd help you stay focused by blocking or discouraging app use during set periods.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "Is it weird to use an app to reduce app usage?",
+    "a": "It might sound ironic, but these apps help you become more aware and set boundaries — which makes reducing screen time easier.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "How can I limit apps without installing new ones?",
+    "a": "Use your phone's built-in tools like Screen Time (iPhone) or Digital Wellbeing (Android) to set daily app limits.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "Does making my phone harder to unlock help?",
+    "a": "Yes. Turning off face recognition and using a longer passcode adds friction, which makes you think twice before unlocking your phone.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "Why would I make my phone screen grey?",
+    "a": "Colorful screens are more stimulating. A grey screen makes apps less attractive and reduces mindless scrolling.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "Can making my phone boring really help?",
+    "a": "Yes. The less fun and flashy your phone feels, the more likely you are to use it as a tool instead of entertainment.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "What's one simple habit to start with?",
+    "a": "Pick one small change — like turning off notifications or removing one app — and try it for a week.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "Do I need discipline to use my phone less?",
+    "a": "A bit, yes. Tools help, but setting clear agreements with yourself is key to changing habits.",
+    "source": "Tips om minder op je telefoon te zitten"
+  },
+  {
+    "q": "What does digital balance actually mean?",
+    "a": "Digital balance means having a healthy mix of screen use, sleep, movement, rest, and social connection — while making conscious choices that support your mental and physical health.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Is screen use always bad for my health?",
+    "a": "No. Screens can help you relax, connect with others, learn, and be creative. Problems arise when screen time replaces sleep, movement, or real-life connection.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "How much time do young adults spend on screens?",
+    "a": "Young adults use screens about 6 to 7 hours per weekday on average, and around 5 hours per day on weekends.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Do most young adults feel they use screens too much?",
+    "a": "Yes. About 60% of young adults feel they spend too much time behind a screen — especially when their daily screen time increases.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Does screen use affect physical health?",
+    "a": "It can. Screen-based activities often involve sitting, which may reduce movement and cause neck, back, or eye complaints over time.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Can too much screen time cause physical complaints?",
+    "a": "Yes. About 16% of young adults experience physical complaints like neck, back, or eye pain due to prolonged screen use.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "How does screen time affect sleep?",
+    "a": "More screen time is linked to later bedtimes and later wake-up times. Some people also find it harder to fall asleep after using screens before bed.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Do young adults generally get enough sleep?",
+    "a": "Most do. Around 88% sleep within recommended limits on weekdays, though many still feel they need more rest.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Can screens disturb sleep quality?",
+    "a": "Yes. About 31% of young adults report poorer sleep quality due to smartphone use, especially when screens are used late at night.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Does screen use help people feel connected?",
+    "a": "Yes. Many young adults use screens to stay connected through chatting, social media, and gaming — which often strengthens social bonds.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Can digital activities support social health?",
+    "a": "Absolutely. Apps for messaging, social media, and gaming help many people feel connected, especially when face-to-face contact isn't possible.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Do people always understand why others use screens?",
+    "a": "Not always. About 21% of young adults feel that family or friends don't understand what screen use gives them.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Can screen use support autonomy and freedom?",
+    "a": "Yes. Many people experience freedom and autonomy during digital activities, especially in creative work or gaming.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Does screen use help with relaxation?",
+    "a": "For many people, yes. Screens are often used to relax, escape stress, and enjoy entertainment — which can be mentally beneficial in moderation.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Can screen use harm concentration?",
+    "a": "It can. About 37% of young adults say screen use negatively affects their concentration, especially with high daily screen time.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Is screen use good for studying or working?",
+    "a": "It depends. About 45% experience a positive effect on study or work, while others struggle with distraction and focus.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Why is making your own choices important for digital balance?",
+    "a": "Feeling in control of your choices supports mental health and makes it easier to find a balance that fits your life.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "Can screen-free time be beneficial?",
+    "a": "Yes. Screen-free moments help with reflection, awareness of emotions, and mental rest — things that are harder to access when always online.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "What's one key takeaway about digital balance?",
+    "a": "It's not about less screen time, but better balance — combining screen use with sleep, movement, focus, connection, and rest.",
+    "source": "Factsheet Digitale Balans Jongvolwassenen"
+  },
+  {
+    "q": "What is smartphone addiction?",
+    "a": "Smartphone addiction means losing control over your phone use, feeling dependent on it, experiencing stress when you can't use it, and noticing negative effects on daily life.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "Is smartphone addiction common among students?",
+    "a": "Yes. Research shows that excessive phone use is very common among university students and can affect mental and physical health.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "Can my phone affect my concentration even if I don't use it?",
+    "a": "Yes. Studies show that simply having your phone nearby can reduce your cognitive capacity and ability to focus.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "How does heavy phone use affect my brain?",
+    "a": "High smartphone dependence is linked to reduced attention control, lower focus, and mental overload — especially during studying or tasks that require concentration.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "Does smartphone addiction affect my mood?",
+    "a": "Yes. Higher levels of smartphone addiction are associated with more anxiety, stress, and depressive feelings.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "What is mindfulness?",
+    "a": "Mindfulness means paying attention to the present moment in a calm, non-judgmental way — noticing thoughts and feelings without reacting automatically.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "Can mindfulness help reduce phone addiction?",
+    "a": "Yes. Research shows that mindfulness training can significantly reduce smartphone addiction and improve self-control.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "How does mindfulness reduce phone use?",
+    "a": "Mindfulness increases awareness of habits, reduces impulsive behavior, and helps people pause before automatically checking their phone.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "Does mindfulness improve mental health?",
+    "a": "Yes. Mindfulness is linked to lower anxiety and depression, higher emotional balance, and better overall well-being.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "Can mindfulness protect me from phone-related stress?",
+    "a": "Yes. Mindfulness acts as a protective factor, reducing the negative impact of smartphone addiction on stress and mood.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "Does mindfulness help with loneliness caused by phone use?",
+    "a": "Yes. Studies show that higher mindfulness levels are linked to less loneliness and less emotional dependence on smartphones.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "Can mindfulness improve sleep affected by phone use?",
+    "a": "Yes. Mindfulness can weaken the negative effects of smartphone addiction on sleep quality and emotional balance.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "How long does mindfulness training need to work?",
+    "a": "Studies show that even 8 weeks of mindfulness training can significantly reduce smartphone addiction and increase self-control.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "Is mindfulness about stopping phone use completely?",
+    "a": "No. Mindfulness helps you use your phone more consciously, not necessarily less — it's about choice instead of habit.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "Does everyone benefit equally from mindfulness?",
+    "a": "Not exactly. People with lower or moderate mindfulness levels often experience the strongest benefits from training.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "Can mindfulness help me feel more in control of my phone use?",
+    "a": "Yes. Mindfulness improves self-awareness and attentional control, making it easier to regulate phone habits.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "What's the main takeaway about mindfulness and phone use?",
+    "a": "Mindfulness is an effective, low-threshold way to reduce problematic phone use and protect mental health.",
+    "source": "The Effect of Mindfulness Training on Mobile Phone Addiction in College Students"
+  },
+  {
+    "q": "Can social media really be addictive?",
+    "a": "Yes. Research shows that excessive social media use shares many characteristics with recognized addictions, such as loss of control, tolerance, and withdrawal symptoms.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "Is social media addiction officially recognized as a disorder?",
+    "a": "Not yet. Social media addiction is not officially recognized in the DSM-5, but there is growing scientific evidence that it functions similarly to other addictions.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "What makes a behavior an addiction?",
+    "a": "A behavior is considered addictive when it leads to loss of control, increasing use over time, withdrawal symptoms, and negative effects on daily life.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "How is social media addiction similar to substance addiction?",
+    "a": "Both involve changes in the brain's reward system, reduced self-control, craving, and continued use despite negative consequences.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "Does social media use activate the brain's reward system?",
+    "a": "Yes. Social media use can activate the dopamine-based reward system, similar to other rewarding behaviors like eating or gambling.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "What role does dopamine play in social media use?",
+    "a": "Dopamine is released when we receive rewards, such as likes or messages. Repeated stimulation can make the brain less sensitive to natural rewards.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "Can social media make me need more stimulation over time?",
+    "a": "Yes. This is called tolerance — needing more or longer social media use to achieve the same rewarding feeling.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "What happens in the brain when someone becomes addicted?",
+    "a": "The brain gradually shifts from voluntary use to habitual and compulsive behavior, driven by changes in reward, stress, and control systems.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "Which brain areas are involved in addiction?",
+    "a": "The main areas are the reward system (basal ganglia), the stress system (amygdala), and the control system (prefrontal cortex).",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "Why is it hard to stop using social media once I start?",
+    "a": "Repeated use weakens the brain's control system and strengthens habit circuits, making behavior more automatic and harder to stop.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "What is craving in social media use?",
+    "a": "Craving is a strong urge to check social media, often triggered by cues like notifications, boredom, or emotional states.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "Do notifications act as addiction cues?",
+    "a": "Yes. Notifications can trigger conditioned responses in the brain, activating the reward system and increasing craving.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "Does excessive social media use reduce self-control?",
+    "a": "Yes. Research shows reduced activity and structural changes in the prefrontal cortex, which is responsible for self-control and decision-making.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "Is there a difference between heavy use and addiction?",
+    "a": "Yes. Heavy use becomes addiction when there is loss of control, compulsive behavior, and clear negative effects on daily functioning.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "Does everyone who uses social media a lot become addicted?",
+    "a": "No. Addiction depends on vulnerability, brain responses, usage patterns, and the presence of negative consequences.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "Can social media addiction affect mental health?",
+    "a": "Yes. It is associated with increased stress, anxiety, impaired concentration, and emotional dysregulation.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "Does the brain react to social media like it does to drugs?",
+    "a": "In many ways, yes. Similar neural pathways and reward mechanisms are involved, especially in excessive and compulsive use.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "Is social media addiction permanent?",
+    "a": "No. The brain is plastic, meaning habits and neural patterns can change with reduced use, awareness, and behavioral interventions.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
+  },
+  {
+    "q": "What's the key scientific takeaway about social media addiction?",
+    "a": "Excessive social media use shows strong neurobiological similarities to recognized addictions, even if it's not yet formally classified.",
+    "source": "Bachelorscriptie Premaster Biomedical Sciences A. de Roo"
   }
 ]
